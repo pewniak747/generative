@@ -1,0 +1,82 @@
+<html>
+  <head>
+    <title>Sheets</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const sheets = [];
+      const colors = ['#4EB3DE','#8DE0A6','#FCF09F','#F27C7C','#DE528C'];
+
+      function generateColor() {
+        return colors[Math.floor(Math.random()*colors.length)];
+      }
+
+      function generateRandomSheet() {
+        return {
+          offset: (Math.random() - 0.5) * 1000,
+          angle: Math.random() * 2 * Math.PI,
+          color: generateColor(),
+        }
+      };
+
+      function generatePatternSheet() {
+        return {
+          offset: -200,
+          angle: sheets.length / 21 * 2 * Math.PI,
+          color: generateColor(),
+        }
+      };
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+      };
+
+      function drawSheet({ offset, angle, color }) {
+        ctx.save();
+        ctx.shadowBlur = 1;
+        ctx.shadowColor = '#444';
+        ctx.fillStyle = color;
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(angle);
+        ctx.translate(0, offset);
+        ctx.fillRect(-2*canvas.width, 0, 4*canvas.width, -4*canvas.height);
+        ctx.restore();
+      }
+
+      function draw() {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        sheets.forEach(function(sheet) {
+          drawSheet(sheet);
+        })
+      };
+
+      adjustCanvasSize();
+      window.addEventListener('resize', function() {
+        adjustCanvasSize();
+        draw();
+      });
+      window.addEventListener('click', function() {
+        // sheets.push(generateRandomSheet());
+        sheets.push(generatePatternSheet());
+        draw();
+      });
+      draw();
+    </script>
+  </body>
+</html>
