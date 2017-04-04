@@ -1,6 +1,6 @@
 <html>
   <head>
-    <title>Sheets</title>
+    <title>Squares</title>
   </head>
   <body>
     <canvas>
@@ -15,6 +15,7 @@
       const ctx = canvas.getContext('2d');
 
       const segmentLength = 10;
+      const bound = 10;
       const segments = [
         [[0, 0], [0, 1]],
       ];
@@ -38,6 +39,13 @@
         return false;
       }
 
+      function isSegmentInBounds(segment) {
+        return (Math.abs(segment[0][0]) <= bound &&
+                Math.abs(segment[0][1]) <= bound &&
+                Math.abs(segment[1][0]) <= bound &&
+                Math.abs(segment[1][1]) <= bound)
+      };
+
       function generateRandomSegment() {
         const lastSegment = segments[segments.length - segmentsBack];
         const direction = directions[Math.floor(Math.random() * directions.length)];
@@ -54,7 +62,7 @@
       }
 
       function grow() {
-        const eligibleSegments = directions.map(generateSegment).filter(s => !isSegmentTouching(s));
+        const eligibleSegments = directions.map(generateSegment).filter(s => !isSegmentTouching(s)).filter(isSegmentInBounds);
         if (eligibleSegments.length > 0) {
           const segment = eligibleSegments[Math.floor(Math.random() * eligibleSegments.length)];
           segmentsBack = 1;
