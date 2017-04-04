@@ -24,6 +24,7 @@
         [0, -1],
         [-1, 0],
       ];
+      let segmentsBack = 1;
 
       function isSegmentTouching(segment) {
         let touching = 0;
@@ -32,23 +33,35 @@
           if (drawnSegment[1][0] === segment[1][0] && drawnSegment[1][1] === segment[1][1]) touching++;
           if (drawnSegment[1][0] === segment[0][0] && drawnSegment[1][1] === segment[0][1]) touching++;
           if (drawnSegment[0][0] === segment[1][0] && drawnSegment[0][1] === segment[1][1]) touching++;
-          if (touching > 1) return true;
+          if (touching > 2) return true;
         }
         return false;
       }
 
       function generateRandomSegment() {
-        const lastSegment = segments[segments.length - 1];
+        const lastSegment = segments[segments.length - segmentsBack];
         const direction = directions[Math.floor(Math.random() * directions.length)];
         const start = lastSegment[1];
         const end = [start[0] + direction[0], start[1] + direction[1]];
         return [start, end];
       };
 
+      function generateSegment(direction) {
+        const lastSegment = segments[segments.length - segmentsBack];
+        const start = lastSegment[1];
+        const end = [start[0] + direction[0], start[1] + direction[1]];
+        return [start, end];
+      }
+
       function grow() {
-        const segment = generateRandomSegment();
-        if (!isSegmentTouching(segment)) {
+        const eligibleSegments = directions.map(generateSegment).filter(s => !isSegmentTouching(s));
+        if (eligibleSegments.length > 0) {
+          const segment = eligibleSegments[Math.floor(Math.random() * eligibleSegments.length)];
+          segmentsBack = 1;
           segments.push(segment);
+        } else if (segmentsBack < segments.length) {
+          segmentsBack++;
+          grow();
         }
       };
 
