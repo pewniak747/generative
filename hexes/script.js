@@ -1,9 +1,9 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 
-const segmentLength = 10;
+const segmentLength = 5;
 const bound = 10;
-const maxPathLength = 1000;
+const maxPathLength = 50;
 const segments = [
   [[0, 0, 0], [0, 1, 0]],
 ];
@@ -55,20 +55,53 @@ function generateSegment(direction, parentSegment) {
   return [start, end];
 }
 
+function directionWeight(point, direction) {
+  // return Math.random();
+  return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) === Math.sign(x2) ? 1 : 0.1).reduce((e, acc = 0) => e + acc);
+}
+
+function chooseUniform(choices) {
+  return choices[Math.floor(Math.random() * choices.length)];
+}
+
+function chooseWeighted(choicesWeights) {
+  // normalize weights
+  const sumWeights = choicesWeights.map(([c, weight]) => weight).reduce((e, acc = 0) => e + acc);
+  const normalized = choicesWeights.map(([c, weight]) => [c, weight / sumWeights]);
+
+  // select based on weights
+  const randomSelection = Math.random();
+  let runningSum = 0;
+  for (const [choice, weight] of normalized) {
+    runningSum += weight;
+    if (randomSelection <= runningSum) {
+      return choice;
+    }
+  }
+
+  // should not end up there
+  console.error("Did not select any choice!");
+}
+
 function grow() {
   const parentSegment = segments[segments.length - segmentsBack];
   const mod = Math.abs(parentSegment[1][0] + parentSegment[1][1] + parentSegment[1][2]) % 2;
   const eligibleDirections = directions.filter((d, idx) => idx % 2 === mod);
-  const eligibleSegments = eligibleDirections.map(d => generateSegment(d, parentSegment)).filter(s => !isSegmentTouching(s)).filter(isSegmentInBounds);
-  if (eligibleSegments.length > 0 && pathLength < maxPathLength) {
-    const segment = eligibleSegments[Math.floor(Math.random() * eligibleSegments.length)];
+  const eligibleSegmentsWithWeights = eligibleDirections
+    .map(d => [d, directionWeight(parentSegment[1], d)])
+    .map(([d, weight]) => [generateSegment(d, parentSegment), weight])
+    .filter(([s, weight]) => !isSegmentTouching(s))
+    .filter(([s, weight]) => isSegmentInBounds(s));
+  if (eligibleSegmentsWithWeights.length > 0 && pathLength < maxPathLength) {
+    // const segment = chooseUniform(eligibleSegmentsWithWeights.map(([s, weigtht]) => s));
+    const segment = chooseWeighted(eligibleSegmentsWithWeights);
     segmentsBack = 1;
     pathLength++;
     segments.push(segment);
   } else {
     if (segmentsBack === 1) {
-      endpoints.push(parentSegment[1]);
       segmentsBack = segments.length;
+      endpoints.push(parentSegment[1]);
     }
     else segmentsBack--;
     pathLength = 0;
@@ -98,10 +131,13 @@ function drawSegment(segment, idx) {
   ctx.beginPath();
   ctx.moveTo(startX * segmentLength, startY * segmentLength);
   ctx.lineTo(endX * segmentLength, endY * segmentLength);
+  // ctx.globalAlpha = Math.max(1 - segment[1].reduce((e, acc = 0) => acc + Math.abs(e)) / 200, 0);
+  /*
   if (idx === segments.length - 1) {
     ctx.strokeStyle = 'red';
     ctx.lineWidth = 3;
   }
+  */
   ctx.stroke();
   ctx.restore();
 };
@@ -136,6 +172,6 @@ window.addEventListener('click', function() {
   grow();
 });
 */
-for(let i = 0; i < 1000; i++) grow();
+// for(let i = 0; i < 3000; i++) grow();
 setInterval(grow, 10);
 draw();
