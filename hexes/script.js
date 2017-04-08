@@ -3,10 +3,11 @@ const ctx = canvas.getContext('2d');
 
 const segmentLength = 5;
 const bound = 10;
-const maxPathLength = 50;
+const maxPathLength = 100;
 const segments = [
   [[0, 0, 0], [0, 1, 0]],
 ];
+const fullPathSegment = [true];
 const endpoints = [];
 const directions = [
   [-1, 0, 0],
@@ -19,11 +20,16 @@ const directions = [
 let segmentsBack = 1;
 let pathLength = 1;
 
+const takenPointsCache = new Set();
+
 function pointsEqual(p1, p2) {
   return p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2];
 }
 
 function isSegmentTouching(segment) {
+  //return false;
+
+  //return !takenPointsCache.has(segment[0].toString()) || !takenPointsCache
   let touching = 0;
   for (drawnSegment of segments) {
     if (pointsEqual(drawnSegment[0], segment[0])) touching++;
@@ -92,18 +98,27 @@ function grow() {
     .map(([d, weight]) => [generateSegment(d, parentSegment), weight])
     .filter(([s, weight]) => !isSegmentTouching(s))
     .filter(([s, weight]) => isSegmentInBounds(s));
-  if (eligibleSegmentsWithWeights.length > 0 && pathLength < maxPathLength) {
+  if (eligibleSegmentsWithWeights.length > 0 && pathLength < maxPathLength && fullPathSegment[segments.length - segmentsBack]) {
     // const segment = chooseUniform(eligibleSegmentsWithWeights.map(([s, weigtht]) => s));
     const segment = chooseWeighted(eligibleSegmentsWithWeights);
     segmentsBack = 1;
     pathLength++;
     segments.push(segment);
+    fullPathSegment.push(true);
   } else {
-    if (segmentsBack === 1) {
-      segmentsBack = segments.length;
+    if (pathLength >= maxPathLength) {
       endpoints.push(parentSegment[1]);
+      segmentsBack = segments.length;
     }
-    else segmentsBack--;
+    else {
+      if (pathLength === 0) {
+        segmentsBack--;
+      } else {
+        // segments.splice(-pathLength, pathLength);
+        fullPathSegment.fill(false, -pathLength)
+        segmentsBack = segments.length;
+      }
+    }
     pathLength = 0;
     grow();
   }
@@ -138,6 +153,9 @@ function drawSegment(segment, idx) {
     ctx.lineWidth = 3;
   }
   */
+  if (!fullPathSegment[idx]) {
+    ctx.globalAlpha = 0.33;
+  }
   ctx.stroke();
   ctx.restore();
 };
@@ -172,6 +190,6 @@ window.addEventListener('click', function() {
   grow();
 });
 */
-// for(let i = 0; i < 3000; i++) grow();
+for(let i = 0; i < 10000; i++) grow();
 setInterval(grow, 10);
 draw();
