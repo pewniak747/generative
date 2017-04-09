@@ -20,16 +20,45 @@ const directions = [
 let segmentsBack = 1;
 let pathLength = 1;
 
-const takenPointsCache = new Set();
+class MultiSet {
+  constructor() {
+    this.set = {};
+  }
+
+  add(key) {
+    if (this.has(key)) {
+      this.set[key] += 1;
+    }
+    else {
+      this.set[key] = 1;
+    }
+  }
+
+  count(key) {
+    return this.set[key] || 0;
+  }
+
+  has(key) {
+    return this.set.hasOwnProperty(key);
+  }
+
+}
+
+const takenPointsCache = new MultiSet();
+
+segments.forEach((segment) => {
+  takenPointsCache.add(segment[0].toString());
+  takenPointsCache.add(segment[1].toString());
+});
 
 function pointsEqual(p1, p2) {
   return p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2];
 }
 
 function isSegmentTouching(segment) {
-  //return false;
+  return takenPointsCache.has(segment[0].toString()) && takenPointsCache.has(segment[1].toString());
 
-  //return !takenPointsCache.has(segment[0].toString()) || !takenPointsCache
+  // naive implementation
   let touching = 0;
   for (drawnSegment of segments) {
     if (pointsEqual(drawnSegment[0], segment[0])) touching++;
@@ -89,38 +118,69 @@ function chooseWeighted(choicesWeights) {
   console.error("Did not select any choice!");
 }
 
-function grow() {
-  const parentSegment = segments[segments.length - segmentsBack];
-  const mod = Math.abs(parentSegment[1][0] + parentSegment[1][1] + parentSegment[1][2]) % 2;
-  const eligibleDirections = directions.filter((d, idx) => idx % 2 === mod);
-  const eligibleSegmentsWithWeights = eligibleDirections
-    .map(d => [d, directionWeight(parentSegment[1], d)])
-    .map(([d, weight]) => [generateSegment(d, parentSegment), weight])
-    .filter(([s, weight]) => !isSegmentTouching(s))
-    .filter(([s, weight]) => isSegmentInBounds(s));
-  if (eligibleSegmentsWithWeights.length > 0 && pathLength < maxPathLength && fullPathSegment[segments.length - segmentsBack]) {
-    // const segment = chooseUniform(eligibleSegmentsWithWeights.map(([s, weigtht]) => s));
-    const segment = chooseWeighted(eligibleSegmentsWithWeights);
-    segmentsBack = 1;
-    pathLength++;
-    segments.push(segment);
-    fullPathSegment.push(true);
-  } else {
-    if (pathLength >= maxPathLength) {
-      endpoints.push(parentSegment[1]);
+function growthBlocked(parentSegment) {
+  if (pathLength >= maxPathLength) {
+    endpoints.push(parentSegment[1]);
+    segmentsBack = segments.length;
+  }
+  else {
+    if (pathLength === 0) {
+      segmentsBack--;
+    } else {
+      fullPathSegment.fill(false, -pathLength)
       segmentsBack = segments.length;
     }
-    else {
-      if (pathLength === 0) {
-        segmentsBack--;
+  }
+  pathLength = 0;
+}
+
+function grow() {
+  let hasGrown = false;
+
+  while(!hasGrown) {
+    hasGrown = true;
+    const parentSegment = segments[segments.length - segmentsBack];
+    if (pathLength > maxPathLength) {
+      growthBlocked(parentSegment);
+      hasGrown = false;
+    }
+    if (!fullPathSegment[segments.length - segmentsBack]) {
+      growthBlocked(parentSegment);
+      hasGrown = false;
+    }
+    if (takenPointsCache.count(parentSegment[1]) === 3) {
+      growthBlocked(parentSegment);
+      hasGrown = false;
+    }
+    if (hasGrown) {
+      const mod = Math.abs(parentSegment[1][0] + parentSegment[1][1] + parentSegment[1][2]) % 2;
+      const eligibleDirections = directions.filter((d, idx) => idx % 2 === mod);
+      const eligibleSegmentsWithWeights = eligibleDirections
+        .map(d => [d, directionWeight(parentSegment[1], d)])
+        .map(([d, weight]) => [generateSegment(d, parentSegment), weight])
+        .filter(([s, weight]) => !isSegmentTouching(s))
+        .filter(([s, weight]) => isSegmentInBounds(s));
+      // console.log("TAKEN", takenPointsCache)
+      // console.log("Eligible segments", eligibleSegmentsWithWeights.length);
+      if (eligibleSegmentsWithWeights.length > 0) {
+        // const segment = chooseUniform(eligibleSegmentsWithWeights.map(([s, weigtht]) => s));
+        const segment = chooseWeighted(eligibleSegmentsWithWeights);
+        segmentsBack = 1;
+        pathLength++;
+        segments.push(segment);
+        fullPathSegment.push(true);
+        takenPointsCache.add(segment[0].toString());
+        takenPointsCache.add(segment[1].toString());
       } else {
-        // segments.splice(-pathLength, pathLength);
-        fullPathSegment.fill(false, -pathLength)
-        segmentsBack = segments.length;
+        growthBlocked(parentSegment);
+        hasGrown = false;
       }
     }
-    pathLength = 0;
-    grow();
+  }
+  // if (wasGrowthBlocked) return grow();
+
+  if (segments.length % 100 === 0) {
+    console.info("Growing", segments.length, "segments");
   }
 };
 
@@ -174,22 +234,30 @@ function drawEndpoint(point) {
 };
 
 function draw() {
+  console.info("DRAWING");
   ctx.save();
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
   segments.forEach(drawSegment)
   endpoints.forEach(drawEndpoint);
-  window.requestAnimationFrame(draw);
+  // window.requestAnimationFrame(draw);
 };
 
 adjustCanvasSize();
-window.addEventListener('resize', adjustCanvasSize);
+window.addEventListener('resize', () => {
+  adjustCanvasSize();
+  draw();
+});
 /*
 window.addEventListener('click', function() {
   grow();
 });
 */
-for(let i = 0; i < 10000; i++) grow();
-setInterval(grow, 10);
+for(let i = 0; i < 100000; i++) {
+  // window.requestIdleCallback(grow);
+  grow();
+  // if (i % 3000 === 0) draw();
+}
+// setInterval(grow, 10);
 draw();
