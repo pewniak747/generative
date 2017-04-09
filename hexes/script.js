@@ -1,9 +1,9 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 
-const segmentLength = 5;
+const segmentLength = 3;
 const bound = 10;
-const maxPathLength = 100;
+let maxPathLength = null;
 const segments = [
   [[0, 0, 0], [0, 1, 0]],
 ];
@@ -125,7 +125,13 @@ function growthBlocked(parentSegment) {
   }
   else {
     if (pathLength === 0) {
-      segmentsBack--;
+      if (segmentsBack > 1) {
+        segmentsBack--;
+      }
+      else {
+        throw "THE END";
+        draw();
+      }
     } else {
       fullPathSegment.fill(false, -pathLength)
       segmentsBack = segments.length;
@@ -135,11 +141,16 @@ function growthBlocked(parentSegment) {
 }
 
 function grow() {
+  maxPathLength = 10 + segments.length / 100;
   let hasGrown = false;
 
   while(!hasGrown) {
     hasGrown = true;
     const parentSegment = segments[segments.length - segmentsBack];
+    if (!parentSegment) {
+      console.log(segments.length, segmentsBack);
+      debugger;
+    }
     if (pathLength > maxPathLength) {
       growthBlocked(parentSegment);
       hasGrown = false;
@@ -254,6 +265,7 @@ window.addEventListener('click', function() {
   grow();
 });
 */
+/*
 for(let i = 0; i < 100000; i++) {
   // window.requestIdleCallback(grow);
   grow();
@@ -261,3 +273,10 @@ for(let i = 0; i < 100000; i++) {
 }
 // setInterval(grow, 10);
 draw();
+*/
+setInterval(() => {
+  for(let i = 0; i < 100; i++) {
+    grow();
+  }
+  draw();
+}, 100);
