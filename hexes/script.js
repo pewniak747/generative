@@ -1,14 +1,9 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 
-const segmentLength = 3;
-const bound = 10;
-let maxPathLength = null;
-const segments = [
-  [[0, 0, 0], [0, 1, 0]],
-];
-const fullPathSegment = [true];
-const endpoints = [];
+// GLOBALS
+
+const segmentLengthPx = 3;
 const directions = [
   [-1, 0, 0],
   [0, -1, 0],
@@ -17,8 +12,6 @@ const directions = [
   [0, 1, 0],
   [0, 0, 1],
 ];
-let segmentsBack = 1;
-let pathLength = 1;
 
 class MultiSet {
   constructor() {
@@ -41,159 +34,142 @@ class MultiSet {
   has(key) {
     return this.set.hasOwnProperty(key);
   }
-
 }
-
-const takenPointsCache = new MultiSet();
-
-segments.forEach((segment) => {
-  takenPointsCache.add(segment[0].toString());
-  takenPointsCache.add(segment[1].toString());
-});
 
 function pointsEqual(p1, p2) {
   return p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2];
 }
 
-function isSegmentTouching(segment) {
-  return takenPointsCache.has(segment[0].toString()) && takenPointsCache.has(segment[1].toString());
+const takenPointsCache = new MultiSet();
 
-  // naive implementation
-  let touching = 0;
-  for (drawnSegment of segments) {
-    if (pointsEqual(drawnSegment[0], segment[0])) touching++;
-    if (pointsEqual(drawnSegment[1], segment[1])) touching++;
-    if (pointsEqual(drawnSegment[1], segment[0])) touching++;
-    if (pointsEqual(drawnSegment[0], segment[1])) touching++;
-    if (touching > 2) return true;
-  }
-  return false;
-}
-
-function isSegmentInBounds(segment) {
-  return true;
-  /*
-  return (Math.abs(segment[0][0]) + Math.abs(segment[0][1]) + Math.abs(segment[0][2]) <= bound &&
-          Math.abs(segment[1][0]) + Math.abs(segment[1][1]) + Math.abs(segment[1][2]) <= bound);
-          */
-  return (Math.abs(segment[0][0]) <= bound &&
-          Math.abs(segment[0][1]) <= bound &&
-          Math.abs(segment[0][2]) <= bound &&
-          Math.abs(segment[1][0]) <= bound &&
-          Math.abs(segment[1][1]) <= bound &&
-          Math.abs(segment[1][2]) <= bound)
-};
-
-function generateSegment(direction, parentSegment) {
-  const start = parentSegment[1];
-  const end = [start[0] + direction[0], start[1] + direction[1], start[2] + direction[2]];
-  return [start, end];
-}
-
-function directionWeight(point, direction) {
-  // return Math.random();
-  return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) === Math.sign(x2) ? 1 : 0.1).reduce((e, acc = 0) => e + acc);
-}
-
-function chooseUniform(choices) {
-  return choices[Math.floor(Math.random() * choices.length)];
-}
-
-function chooseWeighted(choicesWeights) {
-  // normalize weights
-  const sumWeights = choicesWeights.map(([c, weight]) => weight).reduce((e, acc = 0) => e + acc);
-  const normalized = choicesWeights.map(([c, weight]) => [c, weight / sumWeights]);
-
-  // select based on weights
-  const randomSelection = Math.random();
-  let runningSum = 0;
-  for (const [choice, weight] of normalized) {
-    runningSum += weight;
-    if (randomSelection <= runningSum) {
-      return choice;
-    }
+class Shape {
+  constructor({ startingPoint }) {
+    this.segments = [];
+    this.startingPoint = startingPoint;
+    this.growthPoint = startingPoint;
+    this.fullPathSegment = [];
+    this.endpoints = [];
+    this.maxPathLength = null;
+    this.segmentsBack = 1;
+    this.pathLength = 0;
+    this.growthEnded = false;
   }
 
-  // should not end up there
-  console.error("Did not select any choice!");
-}
+  grow() {
+    if (this.growthEnded) return;
 
-function growthBlocked(parentSegment) {
-  if (pathLength >= maxPathLength) {
-    endpoints.push(parentSegment[1]);
-    segmentsBack = segments.length;
-  }
-  else {
-    if (pathLength === 0) {
-      if (segmentsBack > 1) {
-        segmentsBack--;
+    this.maxPathLength = 5 + this.segments.length / 50;
+    let hasGrown = false;
+
+    while(!hasGrown) {
+      if (this.segments.length) {
+        this.growthPoint = this.segments[this.segments.length - this.segmentsBack][1];
       }
-      else {
-        throw "THE END";
-        draw();
-      }
-    } else {
-      fullPathSegment.fill(false, -pathLength)
-      segmentsBack = segments.length;
-    }
-  }
-  pathLength = 0;
-}
 
-function grow() {
-  maxPathLength = 10 + segments.length / 100;
-  let hasGrown = false;
-
-  while(!hasGrown) {
-    hasGrown = true;
-    const parentSegment = segments[segments.length - segmentsBack];
-    if (!parentSegment) {
-      console.log(segments.length, segmentsBack);
-      debugger;
-    }
-    if (pathLength > maxPathLength) {
-      growthBlocked(parentSegment);
-      hasGrown = false;
-    }
-    if (!fullPathSegment[segments.length - segmentsBack]) {
-      growthBlocked(parentSegment);
-      hasGrown = false;
-    }
-    if (takenPointsCache.count(parentSegment[1]) === 3) {
-      growthBlocked(parentSegment);
-      hasGrown = false;
-    }
-    if (hasGrown) {
-      const mod = Math.abs(parentSegment[1][0] + parentSegment[1][1] + parentSegment[1][2]) % 2;
-      const eligibleDirections = directions.filter((d, idx) => idx % 2 === mod);
-      const eligibleSegmentsWithWeights = eligibleDirections
-        .map(d => [d, directionWeight(parentSegment[1], d)])
-        .map(([d, weight]) => [generateSegment(d, parentSegment), weight])
-        .filter(([s, weight]) => !isSegmentTouching(s))
-        .filter(([s, weight]) => isSegmentInBounds(s));
-      // console.log("TAKEN", takenPointsCache)
-      // console.log("Eligible segments", eligibleSegmentsWithWeights.length);
-      if (eligibleSegmentsWithWeights.length > 0) {
-        // const segment = chooseUniform(eligibleSegmentsWithWeights.map(([s, weigtht]) => s));
-        const segment = chooseWeighted(eligibleSegmentsWithWeights);
-        segmentsBack = 1;
-        pathLength++;
-        segments.push(segment);
-        fullPathSegment.push(true);
-        takenPointsCache.add(segment[0].toString());
-        takenPointsCache.add(segment[1].toString());
-      } else {
-        growthBlocked(parentSegment);
+      hasGrown = true;
+      if (this.pathLength > this.maxPathLength) {
         hasGrown = false;
+        // console.log("NOT GROWING -- path at max length")
+      }
+      if (this.segments.length && !this.fullPathSegment[this.segments.length - this.segmentsBack]) {
+        hasGrown = false;
+        // console.log("NOT GROWING -- not a full path segment")
+      }
+      if (takenPointsCache.count(this.growthPoint) === 3) {
+        hasGrown = false;
+        // console.log("NOT GROWING -- fully taken point")
+      }
+      if (hasGrown) {
+        const mod = Math.abs(this.growthPoint[0] + this.growthPoint[1] + this.growthPoint[2]) % 2;
+        const eligibleDirections = directions.filter((d, idx) => idx % 2 === mod);
+        const eligibleSegmentsWithWeights = eligibleDirections
+          .map(d => [d, this.directionWeight(this.growthPoint, d)])
+          .map(([d, weight]) => [this.generateSegment(d, this.growthPoint), weight])
+          .filter(([s, weight]) => !this.isPointTaken(s[1]))
+        if (eligibleSegmentsWithWeights.length > 0) {
+          const segment = this.chooseWeighted(eligibleSegmentsWithWeights);
+          this.segmentsBack = 1;
+          this.pathLength++;
+          this.segments.push(segment);
+          this.fullPathSegment.push(true);
+          takenPointsCache.add(segment[0].toString());
+          takenPointsCache.add(segment[1].toString());
+        } else {
+          hasGrown = false;
+          // console.log("NOT GROWING -- no eligible candidates");
+        }
+      }
+
+      if(!hasGrown) {
+        if (this.pathLength >= this.maxPathLength) {
+          this.endpoints.push(this.growthPoint);
+          this.segmentsBack = this.segments.length;
+        }
+        else {
+          if (this.pathLength === 0) {
+            if (this.segmentsBack > 1) {
+              this.segmentsBack--;
+              // console.log("going back...", this.segmentsBack);
+            }
+            else {
+              this.growthEnded = true;
+            }
+          } else {
+            this.fullPathSegment.fill(false, -this.pathLength)
+            this.segmentsBack = this.segments.length;
+          }
+        }
+        this.pathLength = 0;
       }
     }
-  }
-  // if (wasGrowthBlocked) return grow();
 
-  if (segments.length % 100 === 0) {
-    console.info("Growing", segments.length, "segments");
+    if (this.segments.length % 25 === 0) {
+      console.info("Growing", this.segments.length, "segments");
+    }
+  };
+
+  isPointTaken(point) {
+    return takenPointsCache.has(point.toString());
   }
-};
+
+  generateSegment(direction, point) {
+    const start = point;
+    const end = [start[0] + direction[0], start[1] + direction[1], start[2] + direction[2]];
+    return [start, end];
+  }
+
+  directionWeight(point, direction) {
+    // return Math.random();
+    const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
+    return normalizedPoint.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) === Math.sign(x2) ? 1 : 0.1).reduce((e, acc = 0) => e + acc);
+  }
+
+  chooseUniform(choices) {
+    return choices[Math.floor(Math.random() * choices.length)];
+  }
+
+  chooseWeighted(choicesWeights) {
+    // normalize weights
+    const sumWeights = choicesWeights.map(([c, weight]) => weight).reduce((e, acc = 0) => e + acc);
+    const normalized = choicesWeights.map(([c, weight]) => [c, weight / sumWeights]);
+
+    // select based on weights
+    const randomSelection = Math.random();
+    let runningSum = 0;
+    for (const [choice, weight] of normalized) {
+      runningSum += weight;
+      if (randomSelection <= runningSum) {
+        return choice;
+      }
+    }
+
+    // should not end up there
+    console.error("Did not select any choice!");
+  }
+
+}
+
+// DRAWING
 
 function adjustCanvasSize() {
   const width = document.body.clientWidth;
@@ -208,23 +184,16 @@ function hexTo2d([x, y, z]) {
   return [dx, dy];
 };
 
-function drawSegment(segment, idx) {
+function drawSegment(segment, idx, shape) {
   const [start, end] = segment;
   const [startX, startY] = hexTo2d(start);
   const [endX, endY] = hexTo2d(end);
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.beginPath();
-  ctx.moveTo(startX * segmentLength, startY * segmentLength);
-  ctx.lineTo(endX * segmentLength, endY * segmentLength);
-  // ctx.globalAlpha = Math.max(1 - segment[1].reduce((e, acc = 0) => acc + Math.abs(e)) / 200, 0);
-  /*
-  if (idx === segments.length - 1) {
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 3;
-  }
-  */
-  if (!fullPathSegment[idx]) {
+  ctx.moveTo(startX * segmentLengthPx, startY * segmentLengthPx);
+  ctx.lineTo(endX * segmentLengthPx, endY * segmentLengthPx);
+  if (!shape.fullPathSegment[idx]) {
     ctx.globalAlpha = 0.33;
   }
   ctx.stroke();
@@ -235,48 +204,51 @@ function drawEndpoint(point) {
   const [x, y] = hexTo2d(point);
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
-
   ctx.beginPath();
-  ctx.arc(x * segmentLength, y * segmentLength, segmentLength / 3, 0, 2 * Math.PI);
+  ctx.arc(x * segmentLengthPx, y * segmentLengthPx, segmentLengthPx / 3, 0, 2 * Math.PI);
   ctx.fillStyle = 'white';
   ctx.fill();
   ctx.stroke();
   ctx.restore();
 };
 
-function draw() {
+function draw(shapes) {
   console.info("DRAWING");
   ctx.save();
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
-  segments.forEach(drawSegment)
-  endpoints.forEach(drawEndpoint);
-  // window.requestAnimationFrame(draw);
+  shapes.forEach((shape) => {
+    shape.segments.forEach((segment, idx) => drawSegment(segment, idx, shape));
+    shape.endpoints.forEach(drawEndpoint);
+  })
 };
 
 adjustCanvasSize();
 window.addEventListener('resize', () => {
   adjustCanvasSize();
-  draw();
 });
-/*
-window.addEventListener('click', function() {
-  grow();
-});
-*/
-/*
-for(let i = 0; i < 100000; i++) {
-  // window.requestIdleCallback(grow);
-  grow();
-  // if (i % 3000 === 0) draw();
-}
-// setInterval(grow, 10);
-draw();
-*/
-setInterval(() => {
-  for(let i = 0; i < 100; i++) {
-    grow();
+
+const gap = 99;
+
+const shapes = [
+  // new Shape({ startingPoint: [-gap, 0, 0] }),
+  new Shape({ startingPoint: [gap, 0, 0] }),
+  new Shape({ startingPoint: [0, -gap, 0] }),
+  // new Shape({ startingPoint: [0, gap, 0] }),
+  new Shape({ startingPoint: [0, 0, gap] }),
+  // new Shape({ startingPoint: [0, 0, -gap] }),
+];
+
+const tick = () => {
+  for(let i = 0; i < 25; i++) {
+    for(const shape of shapes) {
+      shape.grow();
+    }
   }
-  draw();
-}, 100);
+  draw(shapes);
+};
+
+setInterval(tick, 10);
+// for (let i = 0; i < 200; i++) tick();
+// document.addEventListener('click', tick);
