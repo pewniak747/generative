@@ -3,7 +3,7 @@ const ctx = canvas.getContext('2d');
 
 // GLOBALS
 
-const segmentLengthPx = 3;
+const segmentLengthPx = 2;
 const directions = [
   [-1, 0, 0],
   [0, -1, 0],
@@ -58,10 +58,12 @@ class Shape {
   grow() {
     if (this.growthEnded) return;
 
-    this.maxPathLength = 5 + this.segments.length / 50;
+    this.maxPathLength = 10 + this.segments.length / 50;
     let hasGrown = false;
 
     while(!hasGrown) {
+      if (this.growthEnded) return;
+
       if (this.segments.length) {
         this.growthPoint = this.segments[this.segments.length - this.segmentsBack][1];
       }
@@ -140,8 +142,8 @@ class Shape {
 
   directionWeight(point, direction) {
     // return Math.random();
-    const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
-    return normalizedPoint.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) === Math.sign(x2) ? 1 : 0.1).reduce((e, acc = 0) => e + acc);
+    // const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
+    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) !== Math.sign(x2) ? 2 * Math.abs(x1) : Math.abs(x1) / 2.0).reduce((e, acc = 0) => e + acc);
   }
 
   chooseUniform(choices) {
@@ -151,6 +153,10 @@ class Shape {
   chooseWeighted(choicesWeights) {
     // normalize weights
     const sumWeights = choicesWeights.map(([c, weight]) => weight).reduce((e, acc = 0) => e + acc);
+    if (sumWeights === 0) {
+      return this.chooseUniform(choicesWeights)[0];
+    }
+
     const normalized = choicesWeights.map(([c, weight]) => [c, weight / sumWeights]);
 
     // select based on weights
@@ -194,7 +200,7 @@ function drawSegment(segment, idx, shape) {
   ctx.moveTo(startX * segmentLengthPx, startY * segmentLengthPx);
   ctx.lineTo(endX * segmentLengthPx, endY * segmentLengthPx);
   if (!shape.fullPathSegment[idx]) {
-    ctx.globalAlpha = 0.33;
+    ctx.globalAlpha = 0.15;
   }
   ctx.stroke();
   ctx.restore();
@@ -205,8 +211,20 @@ function drawEndpoint(point) {
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.beginPath();
-  ctx.arc(x * segmentLengthPx, y * segmentLengthPx, segmentLengthPx / 3, 0, 2 * Math.PI);
+  ctx.arc(x * segmentLengthPx, y * segmentLengthPx, segmentLengthPx / 4, 0, 2 * Math.PI);
   ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+};
+
+function drawStartpoint(point) {
+  const [x, y] = hexTo2d(point);
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.beginPath();
+  ctx.arc(x * segmentLengthPx, y * segmentLengthPx, segmentLengthPx, 0, 2 * Math.PI);
+  ctx.fillStyle = 'black';
   ctx.fill();
   ctx.stroke();
   ctx.restore();
@@ -221,26 +239,29 @@ function draw(shapes) {
   shapes.forEach((shape) => {
     shape.segments.forEach((segment, idx) => drawSegment(segment, idx, shape));
     shape.endpoints.forEach(drawEndpoint);
+    drawStartpoint(shape.startingPoint);
   })
 };
 
 adjustCanvasSize();
 window.addEventListener('resize', () => {
   adjustCanvasSize();
+  draw(shapes);
 });
 
-const gap = 99;
+const gap = 33 * 3;
 
 const shapes = [
-  // new Shape({ startingPoint: [-gap, 0, 0] }),
+  new Shape({ startingPoint: [-gap, 0, 0] }),
   new Shape({ startingPoint: [gap, 0, 0] }),
   new Shape({ startingPoint: [0, -gap, 0] }),
-  // new Shape({ startingPoint: [0, gap, 0] }),
+  new Shape({ startingPoint: [0, gap, 0] }),
   new Shape({ startingPoint: [0, 0, gap] }),
-  // new Shape({ startingPoint: [0, 0, -gap] }),
+  new Shape({ startingPoint: [0, 0, -gap] }),
+  // new Shape({ startingPoint: [0, 0, 0] }),
 ];
 
-const tick = () => {
+function tick() {
   for(let i = 0; i < 25; i++) {
     for(const shape of shapes) {
       shape.grow();
@@ -249,6 +270,17 @@ const tick = () => {
   draw(shapes);
 };
 
-setInterval(tick, 10);
+function times(n, fn) {
+  let i = 0;
+
+  return (...args) => {
+    if (i < n) {
+      fn(...args);
+      i++;
+    }
+  }
+}
+
+setInterval(times(100, tick), 10);
 // for (let i = 0; i < 200; i++) tick();
 // document.addEventListener('click', tick);
