@@ -42,7 +42,7 @@ function pointsEqual(p1, p2) {
 
 const takenPointsCache = new MultiSet();
 
-class Shape {
+class Branch {
   constructor({ startingPoint }) {
     this.segments = [];
     this.startingPoint = startingPoint;
@@ -190,7 +190,7 @@ function hexTo2d([x, y, z]) {
   return [dx, dy];
 };
 
-function drawSegment(segment, idx, shape) {
+function drawSegment(segment, idx) {
   const [start, end] = segment;
   const [startX, startY] = hexTo2d(start);
   const [endX, endY] = hexTo2d(end);
@@ -219,12 +219,8 @@ function drawPoint(point) {
   ctx.restore();
 };
 
-function draw(shape) {
-  ctx.save();
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.restore();
-  shape.segments.forEach((segment, idx) => drawSegment(segment, idx, shape));
+function drawBranch(branch) {
+  branch.segments.forEach((segment, idx) => drawSegment(segment, idx));
 };
 
 function drawPath(path) {
@@ -262,54 +258,63 @@ function drawTargets(targets) {
   // }
 };
 
+function draw() {
+  // reset canvas
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  const growthEnded = false; // TODO: branches.every(b => b.growthEnded);
+  if (!growthEnded) {
+    branches.forEach(b => drawBranch(b));
+  }
+  branches.forEach(b => drawPath(b.path));
+  if (!growthEnded) {
+    drawTargets(targets2D);
+  }
+}
+
 adjustCanvasSize();
 window.addEventListener('resize', () => {
   adjustCanvasSize();
-  draw(shape);
+  draw();
 });
 
-const shape = new Shape({ startingPoint: [0, 0, 0] });
-let path = [[0, 0]];
+// const branch = new Branch({ startingPoint: [0, 0, 0] });
+const branches = [
+  new Branch({ startingPoint: [0, 0, 0] }),
+  new Branch({ startingPoint: [0, 0, 0] }),
+  new Branch({ startingPoint: [0, 0, 0] }),
+];
+branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
 let targets2D = [];
 
 function grow() {
-  shape.grow();
-  draw(shape);
+  branches.forEach(b => b.grow());
 };
 
 function growPath() {
-  // const target = [-10, -10, 0];
-  const targetIdx = Math.ceil(path.length / segmentLengthPx);
-  if (targetIdx >= shape.segments.length - 1) return;
+  branches.forEach((branch) => {
+    const targetIdx = Math.ceil(branch.path.length / segmentLengthPx);
+    if (targetIdx >= branch.segments.length - 1) return;
 
-  const targets = shape.segments.map(s => hexTo2d(s[1]));
-  // let targetsWeights = targets.map((t, idx) => idx - path.length / segmentLengthPx).map(w => w >= 0 && w < 2 ? 1 - Math.abs(w - 1) : 0);
-  let targetsWeights = targets.map((t, idx) => idx - path.length / (segmentLengthPx * 0.80)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
-  // const targetsWeights = Array(targets.length).fill(1.0 / targets.length);
-  // const target1 = hexTo2d(shape.segments[targetIdx][1]);
-  // const target2 = hexTo2d(shape.segments[targetIdx + 1][1]);
-  const targetsWeightsSum = targetsWeights.reduce((w, acc = 0) => w + acc);
-  targetsWeights = targetsWeights.map(t => t / targetsWeightsSum);
-
-  // const target2D = [0.75 * target1[0] + 0.25 * target2[0], 0.75 * target1[1] + 0.25 * target2[1]].map(x => x * segmentLengthPx);
-  // const target2D = hexTo2d(target)
-  const target2D = targets.map((t, idx) => [t[0] * targetsWeights[idx] * segmentLengthPx, t[1] * targetsWeights[idx] * segmentLengthPx]).reduce((t, acc = [0, 0]) => [acc[0] + t[0], acc[1] + t[1]]);
-  // console.log(targetsWeights.map(w => w.toFixed(2)));
-  // console.log(targets.map((t, idx) => [t[0] * targetsWeights[idx] * segmentLengthPx, t[1] * targetsWeights[idx] * segmentLengthPx]));
-  // console.log(targets);
-  // console.log(target2D);
-  const end = path[path.length - 1];
-  const directionVec = [target2D[0] - end[0], target2D[1] - end[1]];
-  const vecLength = Math.sqrt(Math.pow(directionVec[0], 2) + Math.pow(directionVec[1], 2));
-  const normalizedVec = [directionVec[0] / vecLength, directionVec[1] / vecLength];
-  const next = [end[0] + normalizedVec[0], end[1] + normalizedVec[1]];
-  path.push(next);
-  targets2D.push(target2D);
-  // draw(shape);
-  // drawPath(path);
+    const targets = branch.segments.map(s => hexTo2d(s[1]));
+    let targetsWeights = targets.map((t, idx) => idx - branch.path.length / (segmentLengthPx * 0.80)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
+    const targetsWeightsSum = targetsWeights.reduce((w, acc = 0) => w + acc);
+    targetsWeights = targetsWeights.map(t => t / targetsWeightsSum);
+    const target2D = targets.map((t, idx) => [t[0] * targetsWeights[idx] * segmentLengthPx, t[1] * targetsWeights[idx] * segmentLengthPx]).reduce((t, acc = [0, 0]) => [acc[0] + t[0], acc[1] + t[1]]);
+    const end = branch.path[branch.path.length - 1];
+    const directionVec = [target2D[0] - end[0], target2D[1] - end[1]];
+    const vecLength = Math.sqrt(Math.pow(directionVec[0], 2) + Math.pow(directionVec[1], 2));
+    const normalizedVec = [directionVec[0] / vecLength, directionVec[1] / vecLength];
+    const next = [end[0] + normalizedVec[0], end[1] + normalizedVec[1]];
+    branch.path.push(next);
+    targets2D.push(target2D);
+  });
 }
 
 for (let i = 0; i < 40; i++) grow();
 
 setInterval(growPath, 10);
-setInterval(() => { draw(shape); drawPath(path); drawTargets(targets2D);}, 50);
+setInterval(draw, 50);
