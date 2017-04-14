@@ -236,7 +236,7 @@ function drawPath(path) {
   for(let i = 1; i < path.length; i++) {
     ctx.beginPath();
     ctx.lineTo(...path[i]);
-    ctx.lineWidth = 20 * (1 - Math.min(20, i / 50) / 20);
+    ctx.lineWidth = Math.max(1, 20 * (1 - Math.min(20, i / 100) / 20));
     // ctx.lineWidth = 3;
     ctx.stroke();
     ctx.closePath();
@@ -284,7 +284,7 @@ function growPath() {
 
   const targets = shape.segments.map(s => hexTo2d(s[1]));
   // let targetsWeights = targets.map((t, idx) => idx - path.length / segmentLengthPx).map(w => w >= 0 && w < 2 ? 1 - Math.abs(w - 1) : 0);
-  let targetsWeights = targets.map((t, idx) => idx - path.length / (segmentLengthPx * 0.85)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
+  let targetsWeights = targets.map((t, idx) => idx - path.length / (segmentLengthPx * 0.80)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
   // const targetsWeights = Array(targets.length).fill(1.0 / targets.length);
   // const target1 = hexTo2d(shape.segments[targetIdx][1]);
   // const target2 = hexTo2d(shape.segments[targetIdx + 1][1]);
@@ -309,7 +309,7 @@ function growPath() {
   // drawPath(path);
 }
 
-for (let i = 0; i < 20; i++) grow();
+for (let i = 0; i < 40; i++) grow();
 
 setInterval(growPath, 10);
-setInterval(() => { draw(shape); drawPath(path); drawTargets(targets2D);}, 250);
+setInterval(() => { draw(shape); drawPath(path); drawTargets(targets2D);}, 50);
