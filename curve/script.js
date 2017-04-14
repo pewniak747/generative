@@ -171,7 +171,7 @@ function drawSegment(segment, idx) {
   ctx.beginPath();
   ctx.moveTo(startX * segmentLengthPx, startY * segmentLengthPx);
   ctx.lineTo(endX * segmentLengthPx, endY * segmentLengthPx);
-  // ctx.globalAlpha = 0.05;
+  ctx.globalAlpha = 0.15;
   ctx.stroke();
   ctx.restore();
   drawPoint(start);
@@ -265,22 +265,26 @@ let targets2D = [];
 function grow() {
   branches.forEach(b => b.grow());
   const lastBranch = branches[branches.length - 1];
-  if (lastBranch.growthEnded) {
+  if (branches.every(b => b.growthEnded)) {
     console.log("Branch growth ended -- seeking new branch start");
     let candidateFound = false;
     let segmentsBack = 1;
     while(!candidateFound) {
-      if (segmentsBack >= lastBranch.segments.length) return;
-      const candidateBranch = new Branch({ startingPoint: lastBranch.segments[segmentsBack][0] });
-      candidateBranch.grow();
-      if (!candidateBranch.growthEnded) {
-        candidateBranch.origin = {
-          branch: lastBranch,
-          segmentsBack,
-        };
-        branches.push(candidateBranch);
-        candidateFound = true;
-      } else {
+      for (const originBranch of branches) {
+        if (segmentsBack >= originBranch.segments.length) continue;
+        const candidateBranch = new Branch({ startingPoint: originBranch.segments[segmentsBack][0] });
+        candidateBranch.grow();
+        if (!candidateBranch.growthEnded) {
+          candidateBranch.origin = {
+            branch: originBranch,
+            segmentsBack,
+          };
+          branches.push(candidateBranch);
+          candidateFound = true;
+          break;
+        }
+      }
+      if (!candidateFound) {
         segmentsBack++;
       }
     }
@@ -302,8 +306,9 @@ function growPath() {
       continue;
     }
 
-    const targets = branch.segments.map(s => hexTo2d(s[1]));
-    let targetsWeights = targets.map((t, idx) => idx - branch.path.length / segmentLengthPx).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
+    const targets = branch.segments.map(s => hexTo2d(s[1]))
+    targets.unshift(hexTo2d(branch.segments[0][0]));
+    let targetsWeights = targets.map((t, idx) => idx - branch.path.length / (segmentLengthPx * 0.8)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
     const targetsWeightsSum = targetsWeights.reduce((w, acc = 0) => w + acc);
     targetsWeights = targetsWeights.map(t => t / targetsWeightsSum);
     const target2D = targets.map((t, idx) => [t[0] * targetsWeights[idx] * segmentLengthPx, t[1] * targetsWeights[idx] * segmentLengthPx]).reduce((t, acc = [0, 0]) => [acc[0] + t[0], acc[1] + t[1]]);
@@ -322,5 +327,6 @@ function growPath() {
 for (let i = 0; i < 300; i++) grow();
 
 // Grow paths based on branches
+for (let i = 0; i < 30000; i++) growPath();
 setInterval(growPath, 10);
 setInterval(draw, 50);
