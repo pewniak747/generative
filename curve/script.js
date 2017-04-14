@@ -50,9 +50,9 @@ class Branch {
     this.fullPathSegment = [];
     this.endpoints = [];
     this.maxPathLength = null;
-    this.segmentsBack = 1;
     this.pathLength = 0;
     this.growthEnded = false;
+    this.path = [hexTo2d(startingPoint).map(d => d * segmentLengthPx)];
   }
 
   grow() {
@@ -70,8 +70,8 @@ class Branch {
 
       hasGrown = true;
       if (this.pathLength > this.maxPathLength) {
+        console.log("NOT GROWING -- path at max length")
         hasGrown = false;
-        // console.log("NOT GROWING -- path at max length")
       }
       if (hasGrown) {
         const mod = Math.abs(this.growthPoint[0] + this.growthPoint[1] + this.growthPoint[2]) % 2;
@@ -82,15 +82,14 @@ class Branch {
           .filter(([s, weight]) => !this.isPointTaken(s[1]))
         if (eligibleSegmentsWithWeights.length > 0) {
           const segment = this.chooseWeighted(eligibleSegmentsWithWeights);
-          // this.segmentsBack = 1;
           this.pathLength++;
           this.segments.push(segment);
           this.fullPathSegment.push(true);
           takenPointsCache.add(segment[0].toString());
           takenPointsCache.add(segment[1].toString());
         } else {
+          console.log("NOT GROWING -- no eligible candidates");
           hasGrown = false;
-          // console.log("NOT GROWING -- no eligible candidates");
         }
       }
 
@@ -258,14 +257,31 @@ window.addEventListener('resize', () => {
 // const branch = new Branch({ startingPoint: [0, 0, 0] });
 const branches = [
   new Branch({ startingPoint: [0, 0, 0] }),
-  new Branch({ startingPoint: [0, 0, 0] }),
-  new Branch({ startingPoint: [0, 0, 0] }),
+  // new Branch({ startingPoint: [0, 0, 0] }),
+  // new Branch({ startingPoint: [0, 0, 0] }),
 ];
-branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
+// branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
 let targets2D = [];
 
 function grow() {
   branches.forEach(b => b.grow());
+  const lastBranch = branches[branches.length - 1];
+  if (lastBranch.growthEnded) {
+    console.log("Branch growth ended -- seeking new branch start");
+    let candidateFound = false;
+    let segmentsBack = 1;
+    while(!candidateFound) {
+      if (segmentsBack >= lastBranch.segments.length) return;
+      const candidateBranch = new Branch({ startingPoint: lastBranch.segments[segmentsBack][1] });
+      candidateBranch.grow();
+      if (!candidateBranch.growthEnded) {
+        branches.push(candidateBranch);
+        candidateFound = true;
+      } else {
+        segmentsBack++;
+      }
+    }
+  }
 };
 
 function growPath() {
@@ -291,7 +307,9 @@ function growPath() {
   });
 }
 
-for (let i = 0; i < 40; i++) grow();
+// Grow branches
+for (let i = 0; i < 300; i++) grow();
 
+// Grow paths based on branches
 setInterval(growPath, 10);
 setInterval(draw, 50);
