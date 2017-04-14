@@ -65,21 +65,13 @@ class Branch {
       if (this.growthEnded) return;
 
       if (this.segments.length) {
-        this.growthPoint = this.segments[this.segments.length - this.segmentsBack][1];
+        this.growthPoint = this.segments[this.segments.length - 1][1];
       }
 
       hasGrown = true;
       if (this.pathLength > this.maxPathLength) {
         hasGrown = false;
         // console.log("NOT GROWING -- path at max length")
-      }
-      if (this.segments.length && !this.fullPathSegment[this.segments.length - this.segmentsBack]) {
-        hasGrown = false;
-        // console.log("NOT GROWING -- not a full path segment")
-      }
-      if (takenPointsCache.count(this.growthPoint) === 3) {
-        hasGrown = false;
-        // console.log("NOT GROWING -- fully taken point")
       }
       if (hasGrown) {
         const mod = Math.abs(this.growthPoint[0] + this.growthPoint[1] + this.growthPoint[2]) % 2;
@@ -90,7 +82,7 @@ class Branch {
           .filter(([s, weight]) => !this.isPointTaken(s[1]))
         if (eligibleSegmentsWithWeights.length > 0) {
           const segment = this.chooseWeighted(eligibleSegmentsWithWeights);
-          this.segmentsBack = 1;
+          // this.segmentsBack = 1;
           this.pathLength++;
           this.segments.push(segment);
           this.fullPathSegment.push(true);
@@ -103,25 +95,7 @@ class Branch {
       }
 
       if(!hasGrown) {
-        if (this.pathLength >= this.maxPathLength) {
-          this.endpoints.push(this.growthPoint);
-          this.segmentsBack = this.segments.length;
-        }
-        else {
-          if (this.pathLength === 0) {
-            if (this.segmentsBack > 1) {
-              this.segmentsBack--;
-              // console.log("going back...", this.segmentsBack);
-            }
-            else {
-              this.growthEnded = true;
-            }
-          } else {
-            this.fullPathSegment.fill(false, -this.pathLength)
-            this.segmentsBack = this.segments.length;
-          }
-        }
-        this.pathLength = 0;
+        this.growthEnded = true;
       }
     }
 
@@ -265,12 +239,12 @@ function draw() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 
-  const growthEnded = false; // TODO: branches.every(b => b.growthEnded);
-  if (!growthEnded) {
+  const pathEnded = branches.every(b => b.pathEnded);
+  if (!pathEnded) {
     branches.forEach(b => drawBranch(b));
   }
   branches.forEach(b => drawPath(b.path));
-  if (!growthEnded) {
+  if (!pathEnded) {
     drawTargets(targets2D);
   }
 }
@@ -297,7 +271,10 @@ function grow() {
 function growPath() {
   branches.forEach((branch) => {
     const targetIdx = Math.ceil(branch.path.length / segmentLengthPx);
-    if (targetIdx >= branch.segments.length - 1) return;
+    if (targetIdx > branch.segments.length) {
+      branch.pathEnded = true;
+      return;
+    }
 
     const targets = branch.segments.map(s => hexTo2d(s[1]));
     let targetsWeights = targets.map((t, idx) => idx - branch.path.length / (segmentLengthPx * 0.80)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
