@@ -3,7 +3,7 @@ const ctx = canvas.getContext('2d');
 
 // GLOBALS
 
-const segmentLengthPx = 50;
+const segmentLengthPx = 20;
 const directions = [
   [-1, 0, 0],
   [0, -1, 0],
@@ -49,7 +49,7 @@ class Branch {
     this.growthPoint = startingPoint;
     this.fullPathSegment = [];
     this.endpoints = [];
-    this.maxPathLength = null;
+    this.maxPathLength = 25;
     this.pathLength = 0;
     this.growthEnded = false;
   }
@@ -57,7 +57,7 @@ class Branch {
   grow() {
     if (this.growthEnded) return;
 
-    this.maxPathLength = 25 + this.segments.length / 50;
+    // this.maxPathLength = 45 + this.segments.length / 50;
     let hasGrown = false;
 
     while(!hasGrown) {
@@ -115,7 +115,7 @@ class Branch {
   directionWeight(point, direction) {
     // return Math.random();
     // const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
-    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x1) !== Math.sign(x2) ? 2 * Math.abs(x1) : Math.abs(x1) / 2.0).reduce((e, acc = 0) => e + acc);
+    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x2) === -1 ? 2 : 0.1).reduce((e, acc = 0) => e + acc);
   }
 
   chooseUniform(choices) {
@@ -195,16 +195,30 @@ function drawBranch(branch) {
   branch.segments.forEach((segment, idx) => drawSegment(segment, idx));
 };
 
-function drawPath(path) {
+function basePointIdxFor(branch) {
+  if (!branch.origin) return 0;
+
+  return branch.origin.segmentsBack * segmentLengthPx + basePointIdxFor(branch.origin);
+}
+
+function branchWidthAt(pointIdx) {
+  const maxWidth = segmentLengthPx / 2.5;
+  const minWidth = 1;
+  return Math.max(minWidth, maxWidth - Math.min(maxWidth, pointIdx / 100));
+}
+
+function drawPath(branch) {
+  const path = branch.path;
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.moveTo(...path[0]);
   ctx.strokeStyle = 'black';
   ctx.lineCap = 'round';
+  const basePointIdx = basePointIdxFor(branch);
   for(let i = 1; i < path.length; i++) {
     ctx.beginPath();
     ctx.lineTo(...path[i]);
-    ctx.lineWidth = Math.max(1, 20 * (1 - Math.min(20, i / 100) / 20));
+    ctx.lineWidth = branchWidthAt(i + basePointIdx);
     // ctx.lineWidth = 3;
     ctx.stroke();
     ctx.closePath();
@@ -241,7 +255,7 @@ function draw() {
   if (!pathEnded) {
     branches.forEach(b => drawBranch(b));
   }
-  branches.forEach(b => b.path ? drawPath(b.path) : null);
+  branches.forEach(b => b.path && b.segments.length > 3 ? drawPath(b) : null);
   if (!pathEnded) {
     drawTargets(targets2D);
   }
@@ -254,10 +268,19 @@ window.addEventListener('resize', () => {
 });
 
 // const branch = new Branch({ startingPoint: [0, 0, 0] });
+const gap = 30;
 const branches = [
+  /*
+  new Branch({ startingPoint: [0, -gap, 0] }),
+  new Branch({ startingPoint: [0, -gap, 0] }),
+  new Branch({ startingPoint: [0, -gap, 0] }),
+  new Branch({ startingPoint: [0, gap, 0] }),
+  new Branch({ startingPoint: [gap, 0, 0] }),
+  new Branch({ startingPoint: [-gap, 0, 0] }),
+  new Branch({ startingPoint: [0, 0, gap] }),
+  new Branch({ startingPoint: [0, 0, -gap] }),
+  */
   new Branch({ startingPoint: [0, 0, 0] }),
-  // new Branch({ startingPoint: [0, 0, 0] }),
-  // new Branch({ startingPoint: [0, 0, 0] }),
 ];
 branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
 let targets2D = [];
@@ -268,35 +291,51 @@ function grow() {
   if (branches.every(b => b.growthEnded)) {
     console.log("Branch growth ended -- seeking new branch start");
     let candidateFound = false;
-    let segmentsBack = 1;
-    while(!candidateFound) {
+    // while(!candidateFound) {
       for (const originBranch of branches) {
-        if (segmentsBack >= originBranch.segments.length) continue;
-        const candidateBranch = new Branch({ startingPoint: originBranch.segments[segmentsBack][0] });
-        candidateBranch.grow();
-        if (!candidateBranch.growthEnded) {
-          candidateBranch.origin = {
-            branch: originBranch,
-            segmentsBack,
-          };
-          branches.push(candidateBranch);
-          candidateFound = true;
-          break;
+        let segmentsBack = 2;
+        while(!candidateFound) {
+          if (segmentsBack >= originBranch.segments.length) break;
+          const candidateBranch = new Branch({ startingPoint: originBranch.segments[segmentsBack][0] });
+          candidateBranch.grow();
+          if (!candidateBranch.growthEnded) {
+            candidateBranch.origin = {
+              branch: originBranch,
+              segmentsBack,
+            };
+            candidateBranch.maxPathLength = (originBranch.segments.length - segmentsBack) * 0.5;
+            branches.push(candidateBranch);
+            candidateFound = true;
+            break;
+          }
+          if (!candidateFound) {
+            segmentsBack++;
+          }
         }
       }
-      if (!candidateFound) {
-        segmentsBack++;
-      }
-    }
+    //}
   }
 };
+
+function distance2d([x1, y1], [x2, y2]) {
+  return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+}
 
 function growPath() {
   for (const branch of branches) {
     // find starting point
     if (!branch.path) {
-      // TODO: find closest point on the path instead
-      const pathStartingPoint = branch.origin.branch.path[branch.origin.segmentsBack * segmentLengthPx];
+      const branchOrigin = hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx);
+      const allOriginPointsWithDistances = branch.origin.branch.path.map(p => [p, distance2d(p, branchOrigin)]);
+      const originPointsWithDistances = allOriginPointsWithDistances.filter(([p, distance]) => distance || distance === 0);
+      let minDistanceIdx = 0;
+      originPointsWithDistances.forEach(([point, distance], idx) => {
+        if (!distance && distance !== 0) return;
+        if (distance < originPointsWithDistances[minDistanceIdx][1]) {
+          minDistanceIdx = idx;
+        }
+      });
+      const pathStartingPoint = originPointsWithDistances[minDistanceIdx][0];
       branch.path = [pathStartingPoint];
     }
 
@@ -324,9 +363,10 @@ function growPath() {
 }
 
 // Grow branches
-for (let i = 0; i < 300; i++) grow();
+for (let i = 0; i < 200; i++) grow();
 
 // Grow paths based on branches
 for (let i = 0; i < 30000; i++) growPath();
-setInterval(growPath, 10);
-setInterval(draw, 50);
+// setInterval(growPath, 10);
+// setInterval(draw, 50);
+draw();
