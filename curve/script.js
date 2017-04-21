@@ -115,7 +115,7 @@ class Branch {
   directionWeight(point, direction) {
     // return Math.random();
     // const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
-    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x2) === -1 ? 2 : 0.05).reduce((e, acc = 0) => e + acc);
+    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x2) === -1 ? Math.max((15 - Math.abs(x1)), 0.05) : 0.05).reduce((e, acc = 0) => e + acc);
   }
 
   chooseUniform(choices) {
