@@ -115,7 +115,7 @@ class Branch {
   directionWeight(point, direction) {
     // return Math.random();
     // const normalizedPoint = point.map((p, idx) => p - this.startingPoint[idx]);
-    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x2) === -1 ? 2 : 0.1).reduce((e, acc = 0) => e + acc);
+    return point.map((p, idx) => [p, direction[idx]]).map(([x1, x2]) => Math.sign(x2) === -1 ? 2 : 0.05).reduce((e, acc = 0) => e + acc);
   }
 
   chooseUniform(choices) {
@@ -198,13 +198,14 @@ function drawBranch(branch) {
 function basePointIdxFor(branch) {
   if (!branch.origin) return 0;
 
-  return branch.origin.segmentsBack * segmentLengthPx + basePointIdxFor(branch.origin);
+  return branch.origin.pointsBack + basePointIdxFor(branch.origin.branch);
 }
 
 function branchWidthAt(pointIdx) {
-  const maxWidth = segmentLengthPx / 2.5;
-  const minWidth = 1;
-  return Math.max(minWidth, maxWidth - Math.min(maxWidth, pointIdx / 100));
+  const maxWidth = segmentLengthPx / 1.5;
+  const minWidth = segmentLengthPx / 9;
+  const branchLength = 20;
+  return Math.max(minWidth, maxWidth - Math.min(maxWidth, pointIdx / branchLength));
 }
 
 function drawPath(branch) {
@@ -219,7 +220,6 @@ function drawPath(branch) {
     ctx.beginPath();
     ctx.lineTo(...path[i]);
     ctx.lineWidth = branchWidthAt(i + basePointIdx);
-    // ctx.lineWidth = 3;
     ctx.stroke();
     ctx.closePath();
   }
@@ -280,7 +280,7 @@ const branches = [
   new Branch({ startingPoint: [0, 0, gap] }),
   new Branch({ startingPoint: [0, 0, -gap] }),
   */
-  new Branch({ startingPoint: [0, 0, 0] }),
+  new Branch({ startingPoint: [0, 6, 0] }),
 ];
 branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
 let targets2D = [];
@@ -326,8 +326,7 @@ function growPath() {
     // find starting point
     if (!branch.path) {
       const branchOrigin = hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx);
-      const allOriginPointsWithDistances = branch.origin.branch.path.map(p => [p, distance2d(p, branchOrigin)]);
-      const originPointsWithDistances = allOriginPointsWithDistances.filter(([p, distance]) => distance || distance === 0);
+      const originPointsWithDistances = branch.origin.branch.path.map(p => [p, distance2d(p, branchOrigin)]);
       let minDistanceIdx = 0;
       originPointsWithDistances.forEach(([point, distance], idx) => {
         if (!distance && distance !== 0) return;
@@ -337,6 +336,7 @@ function growPath() {
       });
       const pathStartingPoint = originPointsWithDistances[minDistanceIdx][0];
       branch.path = [pathStartingPoint];
+      branch.origin.pointsBack = minDistanceIdx;
     }
 
     const targetIdx = Math.ceil(branch.path.length / segmentLengthPx);
