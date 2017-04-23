@@ -1,9 +1,16 @@
-const canvas = document.querySelector('canvas');
+let canvas;
+const isNode = typeof(require) === 'function';
+if (isNode) {
+  const Canvas = require('canvas');
+  canvas = new Canvas(1000, 1000);
+} else {
+  canvas = document.querySelector('canvas');
+}
 const ctx = canvas.getContext('2d');
 
 // GLOBALS
 
-const segmentLengthPx = 20;
+const segmentLengthPx = 30;
 const directions = [
   [-1, 0, 0],
   [0, -1, 0],
@@ -69,7 +76,7 @@ class Branch {
 
       hasGrown = true;
       if (this.pathLength > this.maxPathLength) {
-        console.log("NOT GROWING -- path at max length")
+        // console.log("NOT GROWING -- path at max length")
         hasGrown = false;
       }
       if (hasGrown) {
@@ -87,7 +94,7 @@ class Branch {
           takenPointsCache.add(segment[0].toString());
           takenPointsCache.add(segment[1].toString());
         } else {
-          console.log("NOT GROWING -- no eligible candidates");
+          // console.log("NOT GROWING -- no eligible candidates");
           hasGrown = false;
         }
       }
@@ -98,7 +105,7 @@ class Branch {
     }
 
     if (this.segments.length % 25 === 0) {
-      console.info("Growing", this.segments.length, "segments");
+      // console.info("Growing", this.segments.length, "segments");
     }
   };
 
@@ -150,8 +157,14 @@ class Branch {
 // DRAWING
 
 function adjustCanvasSize() {
-  const width = document.body.clientWidth;
-  const height = document.body.clientHeight;
+  let width, height;
+  if (!isNode) {
+    width = document.body.clientWidth;
+    height = document.body.clientHeight;
+  } else {
+    width = 30 * segmentLengthPx;
+    height = width;
+  }
   canvas.width = width;
   canvas.height = height;
 };
@@ -212,14 +225,16 @@ function drawPath(branch) {
   const path = branch.path;
   ctx.save();
   ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.moveTo(...path[0]);
   ctx.strokeStyle = 'black';
+  ctx.fillStyle = 'black';
   ctx.lineCap = 'round';
   const basePointIdx = basePointIdxFor(branch);
   for(let i = 1; i < path.length; i++) {
+    const width = branchWidthAt(i + basePointIdx);
     ctx.beginPath();
+    ctx.moveTo(...path[i-1]);
     ctx.lineTo(...path[i]);
-    ctx.lineWidth = branchWidthAt(i + basePointIdx);
+    ctx.lineWidth = width
     ctx.stroke();
     ctx.closePath();
   }
@@ -262,10 +277,12 @@ function draw() {
 }
 
 adjustCanvasSize();
-window.addEventListener('resize', () => {
-  adjustCanvasSize();
-  draw();
-});
+if (!isNode) {
+  window.addEventListener('resize', () => {
+    adjustCanvasSize();
+    draw();
+  });
+}
 
 // const branch = new Branch({ startingPoint: [0, 0, 0] });
 const gap = 30;
@@ -280,7 +297,7 @@ const branches = [
   new Branch({ startingPoint: [0, 0, gap] }),
   new Branch({ startingPoint: [0, 0, -gap] }),
   */
-  new Branch({ startingPoint: [0, 6, 0] }),
+  new Branch({ startingPoint: [0, 9, 0] }),
 ];
 branches.forEach(branch => branch.path = [hexTo2d(branch.startingPoint).map(d => d * segmentLengthPx)]);
 let targets2D = [];
@@ -289,7 +306,7 @@ function grow() {
   branches.forEach(b => b.grow());
   const lastBranch = branches[branches.length - 1];
   if (branches.every(b => b.growthEnded)) {
-    console.log("Branch growth ended -- seeking new branch start");
+    // console.log("Branch growth ended -- seeking new branch start");
     let candidateFound = false;
     // while(!candidateFound) {
       for (const originBranch of branches) {
@@ -339,17 +356,27 @@ function growPath() {
       branch.origin.pointsBack = minDistanceIdx;
     }
 
-    const targetIdx = Math.ceil(branch.path.length / segmentLengthPx);
-    if (targetIdx > branch.segments.length) {
+    /*
+    const finalTarget = hexTo2d(branch.segments[branch.segments.length - 1]);
+    if (distance2d(finalTarget, branch.path[branch.path.length - 1]) < 10) {
       branch.pathEnded = true;
       continue;
     }
+    */
 
     const targets = branch.segments.map(s => hexTo2d(s[1]))
     targets.unshift(hexTo2d(branch.segments[0][0]));
-    let targetsWeights = targets.map((t, idx) => idx - branch.path.length / (segmentLengthPx * 0.8)).map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
+    let targetsWeights1 = targets.map((t, idx) => idx - branch.path.length / (segmentLengthPx * 0.8))
+    if (targetsWeights1.every(e => e <= 0)) {
+      branch.pathEnded = true;
+      continue;
+    }
+    let targetsWeights = targetsWeights1.map(w => w >= 0 && w < 3 ? 1.5 - Math.abs(w - 1.5) : 0);
     const targetsWeightsSum = targetsWeights.reduce((w, acc = 0) => w + acc);
     targetsWeights = targetsWeights.map(t => t / targetsWeightsSum);
+    if (targetsWeightsSum === 0) {
+      debugger;
+    }
     const target2D = targets.map((t, idx) => [t[0] * targetsWeights[idx] * segmentLengthPx, t[1] * targetsWeights[idx] * segmentLengthPx]).reduce((t, acc = [0, 0]) => [acc[0] + t[0], acc[1] + t[1]]);
     const end = branch.path[branch.path.length - 1];
     const directionVec = [target2D[0] - end[0], target2D[1] - end[1]];
@@ -370,3 +397,18 @@ for (let i = 0; i < 30000; i++) growPath();
 // setInterval(growPath, 10);
 // setInterval(draw, 50);
 draw();
+
+if (isNode) {
+  const fs = require('fs')
+  const filename = `${__dirname}/out/tree-${Date.now()}.png`
+  const out = fs.createWriteStream(filename);
+  const stream = canvas.pngStream();
+
+  stream.on('data', (chunk) => {
+    out.write(chunk);
+  });
+
+  stream.on('end', () => {
+    console.log(`Saved ${filename}`);
+  });
+}

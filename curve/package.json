@@ -1,0 +1,14 @@
+{
+  "name": "hex-trees",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "scripts": {
+    "draw": "node script.js"
+  },
+  "author": "Tomasz Pewiński",
+  "license": "ISC",
+  "dependencies": {
+    "canvas": "^1.6.5"
+  }
+}
