@@ -1,0 +1,166 @@
+<html>
+  <head>
+    <title>Dots</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        cursor: crosshair;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      let debug = false;
+
+      const unitLength = 30;
+      const particles = [{
+        x: 10,
+        y: 0,
+        moveVector: [0, -1]
+      }, {
+        x: -10,
+        y: 0,
+        moveVector: [0.5, 0.5]
+      }];
+      const gravitySources = [{
+        x: 0,
+        y: 0,
+        moveVector: [0, 0],
+      }];
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+      };
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      function drawParticle({ x, y, pullVector, moveVector, positions = [] }) {
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        if (debug) {
+          ctx.beginPath();
+          const radius = 3;
+          ctx.arc(x * unitLength, y * unitLength, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#fff';
+          ctx.lineWidth = 1;
+          ctx.fill();
+          ctx.stroke();
+          ctx.closePath();
+        }
+        if (pullVector && debug) {
+          ctx.beginPath();
+          ctx.moveTo(x * unitLength, y * unitLength);
+          ctx.lineTo((x + pullVector[0]) * unitLength, (y + pullVector[1]) * unitLength);
+          ctx.strokeStyle = 'red';
+          ctx.globalAlpha = 0.5;
+          ctx.stroke();
+          ctx.closePath();
+        }
+        if (moveVector && debug) {
+          ctx.beginPath();
+          ctx.moveTo(x * unitLength, y * unitLength);
+          ctx.lineTo((x + moveVector[0]) * unitLength, (y + moveVector[1]) * unitLength);
+          ctx.strokeStyle = 'blue';
+          ctx.globalAlpha = 0.5;
+          ctx.stroke();
+          ctx.closePath();
+        }
+        positions.forEach(([x, y]) => {
+          ctx.beginPath();
+          ctx.arc(x * unitLength, y * unitLength, 1, 0, 2 * Math.PI, true);
+          ctx.fillStyle = '#000';
+          ctx.globalAlpha = 0.25;
+          ctx.fill();
+        });
+        ctx.restore();
+      };
+
+      function drawGravitySource({ x, y }) {
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.beginPath();
+        const radius = 5;
+        ctx.arc(x * unitLength, y * unitLength, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = 'red';
+        ctx.lineWidth = 1;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      function draw() {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        if(debug) {
+          gravitySources.forEach(drawGravitySource);
+        }
+        particles.forEach(drawParticle);
+        window.requestAnimationFrame(draw);
+      };
+
+      function vecLength([x, y]) {
+        return Math.sqrt(x * x + y * y);
+      }
+
+      function vecMult([x, y], a) {
+        return [x * a, y * a];
+      }
+
+      function vecSum([x1, y1], [x2, y2]) {
+        return [x1 + x2, y1 + y2];
+      }
+
+      function step() {
+        gravitySources.forEach((gravitySource) => {
+          const alpha = 0.01 * Math.random();
+          gravitySource.x += alpha * gravitySource.moveVector[0];
+          gravitySource.y += alpha * gravitySource.moveVector[1];
+        });
+        const gravitySource = gravitySources[0];
+        particles.forEach((particle) => {
+          const distance = distance2d([particle.x, particle.y], [gravitySource.x, gravitySource.y]);
+          const gravityForce = 5 / (Math.pow(distance, 2));
+          const pullVector = [(gravitySource.x - particle.x) * gravityForce, (gravitySource.y - particle.y) * gravityForce];
+          const inertia = 0.995;
+          let moveVector = vecMult(pullVector, 1 - inertia);
+          if (particle.moveVector) {
+            moveVector = vecSum(moveVector, vecMult(particle.moveVector, inertia));
+          }
+          //particle.speed = 0.1 * vecLength(moveVector);
+          //moveVector = vecMult(moveVector, particle.speed);
+
+          particle.x += moveVector[0] * 0.1;
+          particle.y += moveVector[1] * 0.1;
+
+          particle.pullVector = pullVector;
+          particle.moveVector = moveVector;
+          if (!particle.positions) particle.positions = [];
+          particle.positions.push([particle.x, particle.y]);
+          if (debug) {
+            console.log(distance, gravityForce, particle.speed);
+          }
+        });
+      }
+
+      adjustCanvasSize();
+      draw();
+      window.addEventListener('resize', adjustCanvasSize);
+      // window.addEventListener('resize', draw);
+      for(let i = 0; i < 1000; i++) step();
+      setInterval(step, 30);
+    </script>
+  </body>
+</html>
