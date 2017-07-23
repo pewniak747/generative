@@ -9,79 +9,155 @@
       body {
         margin: 0;
       }
-      canvas {
-        cursor: crosshair;
-      }
     </style>
     <script>
       const canvas = document.querySelector('canvas');
       const ctx = canvas.getContext('2d');
 
-      const unitLength = 200;
+      const unitLength = 150;
 
       function adjustCanvasSize() {
         const width = document.body.clientWidth;
         const height = document.body.clientHeight;
         canvas.width = width;
         canvas.height = height;
+        draw();
       };
 
-      function distance2d([x1, y1], [x2, y2]) {
-        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      // Perlin noise implementation
+      function perlin({ frequency = 1, amplitude = 1 }) { // returns a function generating perlin noise <0, amplitude>
+        const pseudorandom = (() => {
+          const cache = {};
+          return (i) => {
+            i %= frequency;
+            if (!cache[i]) cache[i] = Math.random();
+            return cache[i];
+          }
+        })();
+
+        function fade(t) {
+          return t * t * t * (t * (t * 6 - 15) + 10);  // 6t^5 - 15t^4 + 10t^3
+        }
+
+        function noise(i) {
+          i *= frequency;
+          const boundDown = Math.floor(i);
+          const boundUp = Math.ceil(i);
+          // console.group();
+          // console.log("bounds", boundUp, boundDown);
+          // console.log("pseudo", pseudorandom(boundUp), pseudorandom(boundDown));
+
+          if (boundDown === boundUp) {
+            // console.log("noise", pseudorandom(boundDown));
+            // console.groupEnd();
+            return pseudorandom(boundDown);
+          }
+          const dot1 = fade(1 - Math.abs(i - boundDown)) * pseudorandom(boundDown);
+          const dot2 = fade(1 - Math.abs(i - boundUp)) * pseudorandom(boundUp);
+          // console.log("fade", Math.abs(i - boundUp), Math.abs(i - boundDown));
+          // console.log("noise", (dot1 + dot2));
+          // console.groupEnd();
+          return (dot1 + dot2);
+        }
+
+        const cache = {};
+        function result (i) {
+          if (!cache[i]) cache[i] = noise(i);
+          return cache[i] * amplitude;
+        }
+
+        result.frequency = frequency;
+        result.amplitude = amplitude;
+        return result;
       }
 
-      function draw(step = Date.now()) {
-        ctx.save();
-        ctx.fillStyle = '#fff';
-        // ctx.globalAlpha = 0.1;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.restore();
+      // Returns a function returning periodic noise <0, 1>
+      function sine({ frequency = 1, amplitude = 1, phase = 0 }) {
+        function result(i) {
+          return (1 + Math.sin(i * frequency * 2 * Math.PI + phase)) / 2 * amplitude;
+        }
 
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        // ctx.rotate(2 * Math.PI * (step - Date.now()) / 1000);
-        const splits = 300;
+        result.amplitude = amplitude;
+        return result;
+      }
+
+      function multiply(noise1, noise2) {
+        function result (i) {
+          return noise1(i) * noise2(i);
+        }
+        result.amplitude = noise1.amplitude * noise2.amplitude;
+        return result;
+      }
+
+      // Angle in radians <0, 2PI>
+      // Returns number <-1, 1>
+      const petals = sine({ frequency: 5, amplitude: 0.1, phase: Math.PI / 2 });
+      const noises = [
+        petals,
+        perlin({ frequency: 2, amplitude: 0.1 }),
+        perlin({ frequency: 50, amplitude: 0.1 }),
+        multiply(petals, perlin({ frequency: 200, amplitude: 0.1 })),
+      ];
+      function noiseAt(angle, cutoff = noises.length) {
+        let result = 0;
+        noises.forEach((noise, idx) => {
+          if (idx < cutoff) {
+            result += (noise(angle / (2*Math.PI)) - noise.amplitude / 2) * 2;
+          }
+        })
+        return result;
+      }
+
+      // Draw the shape with outline
+      function drawShape({ amplitude = 1, fillStyle = '#000', strokeStyle = '#000', cutoff }) {
+        const splits = 1000;
         const unitRadius = unitLength;
-        const baseCycles = 10;
-        const hifiCycles = Math.abs((step / 1000 % 20) - 10) + 1;
-        console.log(hifiCycles);
-        ctx.beginPath();
-        ctx.moveTo(0, unitRadius);
         for (let i = 0; i < splits; i++) {
-          // radius = radius * (1 + (Math.random() - 0.5) / 30);
-          const cooldown = splits / 10;
-          let intensity = 1.0;
-          // if(i < cooldown) intensity = i / cooldown;
-          // if(i > splits - cooldown) intensity = 1 - (i - splits + cooldown) / cooldown;
-          let cyclesMod = hifiCycles % 1;
-          // if (cyclesMod > 1) cyclesMod = cyclesMod - 2;
-
-          // const cycles = hifiCycles - cyclesMod * (i / splits);
-          const cycles = hifiCycles;
-          // const radius = (Math.sin(2 * Math.PI * i / splits * baseCycles) / 10 + Math.sin(2 * Math.PI * i / splits * cycles) / 10) * intensity * unitRadius + unitRadius;
-          // const radius = (Math.sin(2 * Math.PI * i / splits * cycles) / 4) * intensity * unitRadius + unitRadius;
-          const radius = 2 * Math.random() * (Math.random() / 10) * unitRadius + unitRadius;
+          const angle = i / splits * 2 * Math.PI;
+          const radius = (1 + noiseAt(angle, cutoff)) * unitRadius * amplitude;
+          if(i === 0) {
+            ctx.beginPath();
+            ctx.moveTo(0, radius);
+          }
           ctx.save();
-          ctx.rotate(2 * Math.PI * i / splits);
+          ctx.rotate(angle);
           ctx.lineTo(0, radius);
           ctx.restore();
         }
         ctx.closePath();
-        // ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.save();
         ctx.lineWidth = 1;
-        // ctx.setLineDash([1, 5])
+        ctx.strokeStyle = strokeStyle;
         ctx.stroke();
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear scene
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
 
-        // window.requestAnimationFrame(draw);
+        ctx.save();
+        // Normalize 0,0 point to the middle of canvas
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // Draw shapes
+        drawShape({ amplitude: 1.5, fillStyle: '#f6f6f6', strokeStyle: '#d6d6d6', cutoff: 3 });
+        drawShape({ fillStyle: '#333' });
+        drawShape({ amplitude: 0.8, fillStyle: '#666', strokeStyle: '#666', cutoff: 3 });
+        drawShape({ amplitude: 0.3, fillStyle: '#999', strokeStyle: '#333', cutoff: 3 });
+        drawShape({ amplitude: 0.2, fillStyle: '#ccc', strokeStyle: '#666', cutoff: 3 });
+
+        ctx.restore();
       };
 
       adjustCanvasSize();
-      const start = Date.now();
-      setInterval(draw, 50);
-      // for(let i = 0; i < 10000; i+=50) window.requestAnimationFrame(() => draw(start + i));
+      draw();
       window.addEventListener('resize', adjustCanvasSize);
-      // window.addEventListener('resize', draw);
     </script>
   </body>
 </html>
