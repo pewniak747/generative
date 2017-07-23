@@ -1,0 +1,136 @@
+<html>
+  <head>
+    <title>Circle lines</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 200;
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+      };
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      function draw() {
+        console.info("DRAWING");
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // normalize space
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+
+        const unitRadius = unitLength;
+        function distance(rad) {
+          return unitRadius * (1 + Math.sin(rad * 5) / 10)
+        }
+        // draw unit circle
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, -distance(0));
+        for(let i = 0; i < 100; i++) {
+          const rad = i / 100 * 2 * Math.PI;
+          ctx.save();
+          ctx.rotate(rad);
+          ctx.lineTo(0, -distance(rad))
+          ctx.restore();
+        }
+        ctx.lineTo(0, -distance(0));
+        // ctx.strokeStyle = 'red';
+        ctx.globalAlpha = 0.1;
+        // ctx.stroke();
+        ctx.closePath();
+        ctx.restore();
+
+        // draw lines
+        for(let pointIdx = 0; pointIdx < distances.length - 1; pointIdx++) {
+          const startRad = distances[pointIdx] * 2 * Math.PI;
+          const endRad = distances[pointIdx + 1] * 2 * Math.PI;
+          ctx.save();
+          ctx.rotate(startRad);
+          ctx.beginPath();
+          ctx.moveTo(0, -distance(startRad));
+          ctx.restore();
+          ctx.save();
+          ctx.rotate(endRad);
+          ctx.lineTo(0, -distance(endRad));
+          ctx.globalAlpha = 0.5;
+          ctx.stroke();
+          ctx.closePath();
+          ctx.restore();
+        }
+
+        /*
+        const baseCycles = 10;
+        const hifiCycles = Math.abs((step / 1000 % 20) - 10) + 1;
+        console.log(hifiCycles);
+        ctx.beginPath();
+        ctx.moveTo(0, unitRadius);
+        for (let i = 0; i < splits; i++) {
+          // radius = radius * (1 + (Math.random() - 0.5) / 30);
+          const cooldown = splits / 10;
+          let intensity = 1.0;
+          // if(i < cooldown) intensity = i / cooldown;
+          // if(i > splits - cooldown) intensity = 1 - (i - splits + cooldown) / cooldown;
+          let cyclesMod = hifiCycles % 1;
+          // if (cyclesMod > 1) cyclesMod = cyclesMod - 2;
+
+          // const cycles = hifiCycles - cyclesMod * (i / splits);
+          const cycles = hifiCycles;
+          // const radius = (Math.sin(2 * Math.PI * i / splits * baseCycles) / 10 + Math.sin(2 * Math.PI * i / splits * cycles) / 10) * intensity * unitRadius + unitRadius;
+          // const radius = (Math.sin(2 * Math.PI * i / splits * cycles) / 4) * intensity * unitRadius + unitRadius;
+          const radius = 2 * Math.random() * (Math.random() / 10) * unitRadius + unitRadius;
+          ctx.save();
+          ctx.rotate(2 * Math.PI * i / splits);
+          ctx.lineTo(0, radius);
+          ctx.restore();
+        }
+        ctx.closePath();
+        // ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.lineWidth = 1;
+        // ctx.setLineDash([1, 5])
+        ctx.stroke();
+        */
+        ctx.restore();
+
+        // window.requestAnimationFrame(draw);
+      };
+
+      const distancesLength = 200;
+      const distances = [Math.random()];
+      for(let i = 0; i < distancesLength; i++) {
+        distances.push((distances[distances.length - 1] + Math.random() / 4 + 0.25) % 1);
+      }
+
+      adjustCanvasSize();
+      draw();
+      setInterval(function() {
+        for(let i = 0; i < distancesLength; i++) {
+          distances[i] *= 1.0001;
+        }
+        draw();
+      }, 30);
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('resize', draw);
+    </script>
+  </body>
+</html>

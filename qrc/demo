@@ -1,0 +1,1 @@
+data:text/html,<canvas height=300></canvas><script>c=document.body.firstChild.getContext('2d');c.translate(150,150);c.arc(0,0,100,0,2*3.14);c.fill();</script>

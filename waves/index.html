@@ -1,0 +1,121 @@
+<html>
+  <head>
+    <title>Waves</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        cursor: crosshair;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const unitLength = 200;
+      const noises = Array(10).fill(perlin).map(f => f());
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+        draw();
+      };
+
+      function draw() {
+        // console.info("Drawing");
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        // ctx.globalAlpha = 0.05;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        const amplitude = 20;
+        const minAmplitude = 20;
+        // const frequency = (Date.now() % 5000) / 100 + 2;
+        const frequency = 20;
+        const samplingFrequency = 0.1;
+        const points = frequency / samplingFrequency * 2;
+        const offset = Date.now() / 1000;
+
+        for(let noise of noises) {
+          ctx.save();
+          ctx.translate(-500, 0);
+          ctx.moveTo(0, 0);
+          ctx.beginPath();
+          for(let i = 0; i < points; i++) {
+            let amount = 0;
+            for(let noise2 of noises) {
+              amount += ((noise2(offset + noises.indexOf(noise2) * 20 + (noises.indexOf(noise2) / noises.length + 1) * i * samplingFrequency)) * amplitude + minAmplitude) * ((Math.pow(Math.sin(Math.PI * i / (points - 1)), 1/2)));
+              if (noise === noise2) break;
+            }
+            ctx.lineTo(i * 1000 / points, -amount);
+          }
+          ctx.lineWidth = 2;
+          // ctx.setLineDash([1, 3]);
+          // ctx.globalAlpha = 0.5;
+          if(noises.indexOf(noise) > 2) {
+            ctx.stroke();
+          }
+          ctx.closePath();
+          ctx.restore();
+        }
+        ctx.restore();
+      };
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      // draw();
+      setInterval(draw, 20);
+
+      // Perlin noise implementation
+      function perlin() { // returns a function generating perlin noise
+        const pseudorandom = (() => {
+          const cache = {};
+          return (i) => {
+            if (!cache[i]) cache[i] = Math.random();
+            return cache[i];
+          }
+        })();
+
+        function fade(t) {
+          // return t;
+          return t * t * t * (t * (t * 6 - 15) + 10);  // 6t^5 - 15t^4 + 10t^3
+        }
+
+        function noise(i) {
+          const boundDown = Math.floor(i);
+          const boundUp = Math.ceil(i);
+          // console.group();
+          // console.log("bounds", boundUp, boundDown);
+          // console.log("pseudo", pseudorandom(boundUp), pseudorandom(boundDown));
+
+          if (boundDown === boundUp) {
+            // console.log("noise", pseudorandom(boundDown));
+            // console.groupEnd();
+            return pseudorandom(boundDown);
+          }
+          const dot1 = fade(1 - Math.abs(i - boundDown)) * pseudorandom(boundDown);
+          const dot2 = fade(1 - Math.abs(i - boundUp)) * pseudorandom(boundUp);
+          // console.log("fade", Math.abs(i - boundUp), Math.abs(i - boundDown));
+          // console.log("noise", (dot1 + dot2));
+          // console.groupEnd();
+          return (dot1 + dot2);
+        }
+
+        const cache = {};
+        return (i) => {
+          if (!cache[i]) cache[i] = noise(i);
+          return cache[i];
+        }
+      }
+    </script>
+  </body>
+</html>

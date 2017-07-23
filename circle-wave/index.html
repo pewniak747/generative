@@ -1,0 +1,87 @@
+<html>
+  <head>
+    <title>Circle wave</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        cursor: crosshair;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 200;
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+      };
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      function draw(step = Date.now()) {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        // ctx.globalAlpha = 0.1;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        // ctx.rotate(2 * Math.PI * (step - Date.now()) / 1000);
+        const splits = 300;
+        const unitRadius = unitLength;
+        const baseCycles = 10;
+        const hifiCycles = Math.abs((step / 1000 % 20) - 10) + 1;
+        console.log(hifiCycles);
+        ctx.beginPath();
+        ctx.moveTo(0, unitRadius);
+        for (let i = 0; i < splits; i++) {
+          // radius = radius * (1 + (Math.random() - 0.5) / 30);
+          const cooldown = splits / 10;
+          let intensity = 1.0;
+          // if(i < cooldown) intensity = i / cooldown;
+          // if(i > splits - cooldown) intensity = 1 - (i - splits + cooldown) / cooldown;
+          let cyclesMod = hifiCycles % 1;
+          // if (cyclesMod > 1) cyclesMod = cyclesMod - 2;
+
+          // const cycles = hifiCycles - cyclesMod * (i / splits);
+          const cycles = hifiCycles;
+          // const radius = (Math.sin(2 * Math.PI * i / splits * baseCycles) / 10 + Math.sin(2 * Math.PI * i / splits * cycles) / 10) * intensity * unitRadius + unitRadius;
+          // const radius = (Math.sin(2 * Math.PI * i / splits * cycles) / 4) * intensity * unitRadius + unitRadius;
+          const radius = 2 * Math.random() * (Math.random() / 10) * unitRadius + unitRadius;
+          ctx.save();
+          ctx.rotate(2 * Math.PI * i / splits);
+          ctx.lineTo(0, radius);
+          ctx.restore();
+        }
+        ctx.closePath();
+        // ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+        ctx.lineWidth = 1;
+        // ctx.setLineDash([1, 5])
+        ctx.stroke();
+        ctx.restore();
+
+        // window.requestAnimationFrame(draw);
+      };
+
+      adjustCanvasSize();
+      const start = Date.now();
+      setInterval(draw, 50);
+      // for(let i = 0; i < 10000; i+=50) window.requestAnimationFrame(() => draw(start + i));
+      window.addEventListener('resize', adjustCanvasSize);
+      // window.addEventListener('resize', draw);
+    </script>
+  </body>
+</html>

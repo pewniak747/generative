@@ -1,0 +1,271 @@
+<html>
+  <head>
+    <title>Particles</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        cursor: crosshair;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 10;
+      const particles = [];
+      const focus = [0, 0];
+      let debug = false;
+      let fieldVisible = false;
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+      };
+
+      function mouseMoved(event) {
+        focus[0] = (event.x - canvas.width / 2) / unitLength;
+        focus[1] = (event.y - canvas.height / 2) / unitLength;
+      }
+
+      function canvasClicked() {
+        fieldVisible = !fieldVisible;
+      }
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      function chooseUniform(choices) {
+        return choices[Math.floor(Math.random() * choices.length)];
+      }
+
+      function chooseWeighted(choicesWeights) {
+        // normalize weights
+        const sumWeights = choicesWeights.map(([c, weight]) => weight).reduce((e, acc = 0) => e + acc);
+        if (sumWeights === 0) {
+          return chooseUniform(choicesWeights)[0];
+        }
+
+        const normalized = choicesWeights.map(([c, weight]) => [c, weight / sumWeights]);
+
+        // select based on weights
+        const randomSelection = Math.random();
+        let runningSum = 0;
+        for (const [choice, weight] of normalized) {
+          runningSum += weight;
+          if (randomSelection <= runningSum) {
+            return choice;
+          }
+        }
+
+        // should not end up there
+        console.error("Did not select any choice!");
+      }
+
+      function chooseWeightedSkew(choicesWeights) {
+        let maxWeight = -Infinity
+        choicesWeights.forEach(([choice, weight]) => {
+          if(maxWeight < weight) maxWeight = weight;
+        })
+
+        const choicesSkewedWeights = choicesWeights.map(([choice, weight]) =>
+          [choice, weight * Math.pow(1 - (maxWeight - weight) / maxWeight, 6)]
+        )
+
+        return chooseWeighted(choicesSkewedWeights);
+      }
+
+      function chooseMaximum(choicesWeights) {
+        let max = -Infinity;
+        let maxChoice = null;
+        choicesWeights.forEach(([choice, weight]) => {
+          if (weight > max) {
+            max = weight;
+            maxChoice = choice;
+          }
+        });
+        return maxChoice;
+      }
+
+      function intensityLinear(x, y, center) {
+        const distance = distance2d([x, y], center);
+        return Math.min(1, Math.max(0, 1 - (distance / 40)));
+      }
+
+      function intensityRadial(x, y, center) {
+        const distance = distance2d([x, y], center);
+        return (Math.cos(distance * 2 * Math.PI / 20) + 1) / 2;
+      }
+
+      function intensityRadialFading(x, y, center) {
+        return intensityRadial(x, y, center) * intensityLinear(x, y, center);
+      }
+
+      function intensityRadialDoubleFoci(x, y, center, intensityFn) {
+        return (intensityFn(x, y, center) + intensityFn(x, y, center.map(u => -u))) / 2;
+      }
+
+      function intensityRadialTripleFoci(x, y, center, intensityFn) {
+        const center2 = center.map(u => -u) // FIXME
+        const center3 = center.map(u => -u) // FIXME
+        return (intensityFn(x, y, center) + intensityFn(x, y, center2) + intensityFn(x, y, center3)) / 3;
+      }
+
+      function intensityRadialQuadrupleFoci(x, y, center, intensityFn) {
+        return (intensityFn(x, y, center) + intensityFn(x, y, center.map(u => -u)) + intensityFn(x, y, [center[0], -center[1]]) + intensityFn(x, y, [-center[0], center[1]])) / 4;
+      }
+
+      function intensity(x, y) {
+        // return intensityRadialTripleFoci(x, y, focus, intensityRadial);
+        return intensityRadialQuadrupleFoci(x, y, focus, intensityRadial);
+        // return intensityRadialQuadrupleFoci(x, y, focus, intensityRadialFading);
+        // return intensityRadialFading(x, y, focus);
+        // return intensityRadial(x, y, focus);
+        // return intensityLinear(x, y, focus);
+      }
+
+      function step(dt) {
+        particles.forEach((p) => {
+          const currentIntensity = intensity(p.x, p.y);
+          const randomAngle = Math.random() * 2 * Math.PI;
+          const moveLength = 0.3 * Math.sqrt(1 - currentIntensity);
+          const targets = [{
+            x: p.x,
+            y: p.y,
+          }, {
+            x: p.x + Math.sin(randomAngle) * moveLength,
+            y: p.y + Math.cos(randomAngle) * moveLength,
+          }, {
+            x: p.x - Math.sin(randomAngle) * moveLength,
+            y: p.y + Math.cos(randomAngle) * moveLength,
+          }, {
+            x: p.x + Math.sin(randomAngle) * moveLength,
+            y: p.y - Math.cos(randomAngle) * moveLength,
+          }, {
+            x: p.x - Math.sin(randomAngle) * moveLength,
+            y: p.y - Math.cos(randomAngle) * moveLength,
+          }]
+          // const targetX = p.x + Math.sin(randomAngle) * moveLength;
+          // const targetY = p.y + Math.cos(randomAngle) * moveLength;
+          // const targetIntensity = intensity(targetX, targetY);
+          const targetsWithIntensities = targets.map(t => [t, intensity(t.x, t.y)]);
+          const target = chooseWeightedSkew(targetsWithIntensities)
+          p.x = target.x;
+          p.y = target.y;
+          //const intensity = Math.min(1, Math.max(0, 0.9 / distance));
+          // const vector = [focus[0] - p.origin.x, focus[1] - p.origin.y];
+          // const vectorLen = distance2d([0, 0], vector);
+          // const normalVector = [vector[0] / vectorLen, vector[1] / vectorLen];
+          // p.x = p.origin.x + normalVector[0] * intensity;
+          // p.y = p.origin.y + normalVector[1] * intensity;
+          //p.intensity = intensity
+          // if(p.origin.x === 0 && p.origin.y === 0) {
+            // console.log(intensity);
+          // }
+        });
+      }
+
+
+      function drawParticle({ x, y, origin }) {
+        if(debug) {
+          ctx.beginPath();
+          ctx.moveTo(origin.x * unitLength, origin.y * unitLength);
+          ctx.lineTo(x * unitLength, y * unitLength);
+          ctx.stroke();
+          ctx.closePath();
+          ctx.fillText(intensity(x, y).toFixed(2), x * unitLength + 2, y * unitLength - 2);
+        }
+        ctx.fillRect(x * unitLength, y * unitLength, 1, 1);
+      };
+
+      function clearScene() {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        // ctx.globalAlpha = 0.2;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      function drawField() {
+        const resolution = 35;
+        const granularity = 0.5;
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        for(let x = -resolution; x <= resolution; x++) {
+          for (let y = -resolution; y <= resolution; y++) {
+            for (let gx = 0; gx < 1; gx += granularity) {
+              for (let gy = 0; gy < 1; gy += granularity) {
+                ctx.save();
+                const alpha = intensity(x + gx + granularity / 2, y + gy + granularity / 2);
+                if(alpha < 0 || alpha > 1) throw new Error('Invalid intensity');
+                ctx.globalAlpha = alpha;
+                ctx.fillRect((x + gx) * unitLength, (y + gy) * unitLength, granularity * unitLength, granularity * unitLength)
+                ctx.restore();
+              }
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      function drawScene() {
+        if(fieldVisible) drawField();
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        particles.forEach(drawParticle);
+        ctx.restore();
+      }
+
+      function drawLoop() {
+        clearScene();
+        drawScene();
+        window.requestAnimationFrame(drawLoop);
+      };
+
+      const resolutionY = 35;
+      const resolutionX = resolutionY * 1.8
+      const granularity = 1;
+      for(let x = -resolutionX; x <= resolutionX; x++) {
+        for (let y = -resolutionY; y <= resolutionY; y++) {
+          for (let z = 0; z < granularity; z++) {
+            const origin = {
+              x: x + (Math.random() - 0.5) / 2,
+              y: y + (Math.random() - 0.5) / 2,
+            }
+            particles.push({ x: origin.x, y: origin.y, origin, intensity: 0 })
+          }
+        }
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('mousemove', mouseMoved);
+      canvas.addEventListener('click', canvasClicked);
+
+      let lastUpdate = Date.now();
+      /*
+      for(let i = 0; i < 1000; i++) {
+        step(0);
+      }
+      */
+      function updateLoop() {
+        const currentUpdate = Date.now();
+        step(currentUpdate - lastUpdate);
+        lastUpdate = currentUpdate;
+        setTimeout(updateLoop, 10)
+        // window.requestIdleCallback(updateLoop);
+      }
+
+      updateLoop();
+      drawLoop();
+    </script>
+  </body>
+</html>
