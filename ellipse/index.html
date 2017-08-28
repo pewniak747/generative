@@ -1,0 +1,167 @@
+<html>
+  <head>
+    <title>Ellipse</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 300;
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      };
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      // Perlin noise implementation
+      function perlin({ frequency = 1, amplitude = 1 }) { // returns a function generating perlin noise <0, amplitude>
+        const pseudorandom = (() => {
+          const cache = {};
+          return (i) => {
+            i %= frequency;
+            if (!cache[i]) cache[i] = Math.random();
+            return cache[i];
+          }
+        })();
+
+        function fade(t) {
+          return t * t * t * (t * (t * 6 - 15) + 10);  // 6t^5 - 15t^4 + 10t^3
+        }
+
+        function noise(i) {
+          i *= frequency;
+          const boundDown = Math.floor(i);
+          const boundUp = Math.ceil(i);
+          // console.group();
+          // console.log("bounds", boundUp, boundDown);
+          // console.log("pseudo", pseudorandom(boundUp), pseudorandom(boundDown));
+
+          if (boundDown === boundUp) {
+            // console.log("noise", pseudorandom(boundDown));
+            // console.groupEnd();
+            return pseudorandom(boundDown);
+          }
+          const dot1 = fade(1 - Math.abs(i - boundDown)) * pseudorandom(boundDown);
+          const dot2 = fade(1 - Math.abs(i - boundUp)) * pseudorandom(boundUp);
+          // console.log("fade", Math.abs(i - boundUp), Math.abs(i - boundDown));
+          // console.log("noise", (dot1 + dot2));
+          // console.groupEnd();
+          return (dot1 + dot2);
+        }
+
+        const cache = {};
+        function result (i) {
+          if (!cache[i]) cache[i] = noise(i);
+          return cache[i] * amplitude;
+        }
+
+        result.frequency = frequency;
+        result.amplitude = amplitude;
+        return result;
+      }
+
+      function draw() {
+        console.info("DRAWING");
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // normalize space
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate(-Math.PI / 2);
+
+        const unitRadius = unitLength;
+        const a = 1.0;
+        const b = 0.4;
+        const periods = 30;
+        const noise = perlin({ frequency: Math.floor(periods / 1), amplitude: 0.2 });
+        // const startPhase = 0;
+        const startPhase = -Math.PI / 8 + Math.random() * Math.PI / 4;
+        let phase = startPhase;
+        function distance(rad, noisy = true) {
+          rad += phase;
+          const ellipse = ((a * b) / Math.sqrt(Math.pow(b * Math.cos(rad), 2) + Math.pow(a * Math.sin(rad), 2)));
+          if (!noisy) return ellipse * unitRadius;
+
+          const noiseAmount = noise(rad / (2 * periods * Math.PI));
+          const centeredNoiseAmount = noiseAmount - noise.amplitude / 2;
+          return unitRadius * (ellipse + centeredNoiseAmount);
+        }
+
+        // draw noisy ellipses
+        const resolution = 200;
+        const wiggle = Math.PI / 8;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, -distance(0));
+        for(let i = 0; i < resolution * periods; i++) {
+          const rad = i / resolution * 2 * Math.PI;
+          ctx.save();
+          ctx.rotate(rad);
+          ctx.lineTo(0, -distance(rad))
+          ctx.restore();
+          // phase = startPhase - (0.5 - Math.abs((i / (resolution * periods)) - 0.5)) * wiggle;
+          phase = startPhase + Math.sin(2 * Math.PI * (i / (resolution * periods))) * wiggle;
+        }
+        ctx.lineTo(0, -distance(0));
+        ctx.globalAlpha = 0.8;
+        ctx.closePath();
+        ctx.lineWidth = 1.01;
+        ctx.stroke();
+        ctx.restore();
+
+        // draw base ellipse
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(0, -distance(0, false));
+        for(let i = 0; i < 100; i++) {
+          const rad = i / 100 * 2 * Math.PI;
+          ctx.save();
+          ctx.rotate(rad);
+          ctx.lineTo(0, -distance(rad, false))
+          ctx.restore();
+        }
+        ctx.lineTo(0, -distance(0, false));
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'red';
+        // ctx.globalAlpha = 0.5;
+        // ctx.stroke();
+        ctx.closePath();
+        ctx.restore();
+
+        ctx.restore();
+        // window.requestAnimationFrame(draw);
+      };
+
+      const distancesLength = 200;
+      const distances = [Math.random()];
+      for(let i = 0; i < distancesLength; i++) {
+        distances.push((distances[distances.length - 1] + Math.random() / 4 + 0.25) % 1);
+      }
+
+      adjustCanvasSize();
+      draw();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('resize', draw);
+    </script>
+  </body>
+</html>
