@@ -6,6 +6,10 @@ Experiments with generative drawing
 
 [https://pewniak747.github.io/generative/curve](https://pewniak747.github.io/generative/curve)
 
+#### Ellipse
+
+[https://pewniak747.github.io/generative/ellipse](https://pewniak747.github.io/generative/ellipse)
+
 #### Circle wave
 
 [https://pewniak747.github.io/generative/circle-wave](https://pewniak747.github.io/generative/circle-wave)
