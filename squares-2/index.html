@@ -1,0 +1,109 @@
+<html>
+  <head>
+    <title>Squares 2</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script src="perlin.js"></script>
+    <script>
+      noise.seed(Math.random());
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 40;
+      const gutter = 16;
+      const bound = 10;
+      const squares = [];
+      for(var x = -bound; x < bound; x++) {
+        for(var y = -bound; y < bound; y++) {
+          squares.push({ x, y, height:  Math.random() });
+        }
+      }
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      };
+
+      function drawSquare(segment) {
+        const { x, y, height: rawHeight } = segment;
+        const lineWidth = 1;
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.beginPath();
+        const centerX = (x + 0.5) * unitLength + x * gutter;
+        const centerY = (y + 0.5) * unitLength + y * gutter;
+        const normalSize = (unitLength - lineWidth);
+        // const height = Math.abs(((rawHeight + (Date.now() / 15000)) % 2) - 1);
+        const height = rawHeight;
+        const size = normalSize * (height + 0.5);
+        ctx.rect(centerX - size / 2 + lineWidth / 2, centerY - size / 2 + lineWidth / 2, size, size);
+        ctx.shadowColor = '#999';
+        ctx.shadowBlur = 10 * height;
+        ctx.fillStyle = '#fff';
+        ctx.lineWidth = lineWidth;
+        // ctx.strokeStyle ='#999';
+        ctx.stroke();
+        ctx.fill();
+        ctx.closePath();
+        ctx.restore();
+      };
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      function intensityRadial(x, y, center) {
+        const distance = distance2d([x, y], center);
+        return (Math.cos(distance * 2 * Math.PI / 10) + 1) / 2;
+      }
+
+      function intensityRadialQuadrupleFoci(x, y, center, intensityFn) {
+        return (intensityFn(x, y, center) + intensityFn(x, y, center.map(u => -u)) + intensityFn(x, y, [center[0], -center[1]]) + intensityFn(x, y, [-center[0], center[1]])) / 4;
+      }
+
+      function draw() {
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+        squares.sort((a, b) => (a.height - b.height) || (a.x - b.x) || (a.y - b.y)).forEach(drawSquare);
+        window.requestAnimationFrame(draw);
+      };
+
+      const focus = [20, 20];
+      function mouseMoved(event) {
+        focus[0] = (event.x - canvas.width / 2) / unitLength;
+        focus[1] = (event.y - canvas.height / 2) / unitLength;
+        update();
+      }
+
+      function update() {
+        squares.forEach((s) => {
+          // s.height = (Math.cos(phase - Math.sqrt(s.x * s.x + s.y * s.y)) + 1) / 2;
+          // s.height = intensityRadialQuadrupleFoci(s.x, s.y, focus, intensityRadial);
+          // s.height = (noise.perlin2(s.x / 5, s.y / 5) + 1) / 2;
+          s.height = (noise.perlin3(s.x / 5, s.y / 5, Date.now() / 2000) + 1) / 2;
+        });
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('mousemove', mouseMoved);
+      update();
+      setInterval(update, 20);
+      draw();
+    </script>
+  </body>
+</html>
