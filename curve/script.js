@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 
 // GLOBALS
 
-const segmentLengthPx = 30;
+const segmentLengthPx = 50;
 const directions = [
   [-1, 0, 0],
   [0, -1, 0],
@@ -159,8 +159,9 @@ class Branch {
 function adjustCanvasSize() {
   let width, height;
   if (!isNode) {
-    width = document.body.clientWidth;
-    height = document.body.clientHeight;
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    width = document.body.clientWidth * devicePixelRatio;
+    height = document.body.clientHeight * devicePixelRatio;
   } else {
     width = 30 * segmentLengthPx;
     height = width;
