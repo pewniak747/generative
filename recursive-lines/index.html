@@ -1,0 +1,138 @@
+<html>
+  <head>
+    <title>Recursive lines</title>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const unitLength = 50;
+      const graph = {
+        lines: [{ start: [-10, -10], end: [11, -11], thickness: 1 }, { start: [-11, 10], end: [10, 9], thickness: 1 }],
+        // lines: [{ start: [-10, -10], end: [10, -10], thickness: 1 }, { start: [-10, 10], end: [10, 10], thickness: 1 }],
+        children: []
+      };
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      }
+
+      function drawLine(line) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(line.start[0] * unitLength, line.start[1] * unitLength);
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 10 * line.thickness;
+        ctx.lineTo(line.end[0] * unitLength, line.end[1] * unitLength);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawNode(node) {
+        node.children.map(drawNode);
+        node.lines.map(drawLine);
+      }
+
+      function draw() {
+        // Clear canvas
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // Move coordinates origin to canvas center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        drawNode(graph);
+        ctx.restore();
+      }
+
+      function eachCons(array) {
+        const result = [];
+        for(let i = 0; i < array.length - 1; i++) {
+          result.push(array.slice(i, i + 2));
+        }
+        return result;
+      }
+
+      function zip(array1, array2) {
+        const length = Math.min(array1.length, array2.length);
+        return array1.slice(0, length).map((el1, idx) => [el1, array2[idx]]);
+      }
+
+      function clamp(a, b, value) {
+        const max = Math.max(a, b);
+        const min = Math.min(a, b);
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+      }
+
+      function splitEqual(start, end, pointsCount) {
+        const dx = (end[0] - start[0]) / (pointsCount - 1);
+        const dy = (end[1] - start[1]) / (pointsCount - 1);
+        const result = [start];
+        for(let i = 0; i < pointsCount - 1; i++) {
+          const lastPoint = result[result.length - 1];
+          result.push([lastPoint[0] + dx, lastPoint[1] + dy]);
+        }
+        return result;
+      }
+
+      function splitNoisy(start, end, pointsCount) {
+        const dx = (end[0] - start[0]) / (pointsCount - 1);
+        const dy = (end[1] - start[1]) / (pointsCount - 1);
+        const equalPoints = splitEqual(start, end, pointsCount);
+
+        return equalPoints.map((point, idx) => {
+          if (idx === 0 || idx === equalPoints.length - 1) return point;
+          const amount = (Math.random() - 0.5) / 1.5;
+          return [
+            clamp(start[0], end[0], point[0] + dx * amount),
+            clamp(start[1], end[1], point[1] + dy * amount)
+          ];
+        })
+      }
+
+      function growNode(node, depth) {
+        if (depth > 3 + Math.random() * 2) return;
+        //if (depth > 3) return;
+
+        const consLines = eachCons(node.lines);
+        const children = consLines.map(([line1, line2]) => {
+          const newLinesCount = depth + 2 + Math.ceil(Math.random() * 5);
+          // const newLinesCount = 4 + depth * 3;
+          const splitFn = splitNoisy;
+          const points1 = splitFn(line1.start, line1.end, newLinesCount);
+          const points2 = splitFn(line2.start, line2.end, newLinesCount);
+          const thickness = (line1.thickness + line2.thickness) / clamp(2, newLinesCount, newLinesCount * 0.6);
+          const lines = zip(points1, points2).map(([start, end]) => ({ start, end, thickness }));
+          const node = { lines, children: [] };
+          growNode(node, depth + 1);
+          return node;
+        });
+        node.children = children;
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('resize', draw);
+      growNode(graph, 0);
+      draw();
+    </script>
+  </body>
+</html>
