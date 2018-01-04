@@ -16,8 +16,8 @@
       const ctx = canvas.getContext('2d');
       const unitLength = 50;
       const graph = {
-        lines: [{ start: [-10, -10], end: [11, -11], thickness: 1 }, { start: [-11, 10], end: [10, 9], thickness: 1 }],
-        // lines: [{ start: [-10, -10], end: [10, -10], thickness: 1 }, { start: [-10, 10], end: [10, 10], thickness: 1 }],
+        //lines: [{ start: [-10, -10], end: [11, -11], thickness: 1 }, { start: [-11, 10], end: [10, 9], thickness: 1 }],
+        lines: [{ start: [-10, -10], end: [10, -10], thickness: 1 }, { start: [-10, 10], end: [10, 10], thickness: 1 }],
         children: []
       };
 
@@ -36,14 +36,32 @@
         ctx.beginPath();
         ctx.moveTo(line.start[0] * unitLength, line.start[1] * unitLength);
         ctx.lineCap = 'round';
-        ctx.lineWidth = 10 * line.thickness;
+        ctx.lineWidth = 10 * Math.max(0.01, line.thickness);
         ctx.lineTo(line.end[0] * unitLength, line.end[1] * unitLength);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawLinesOutline(lines) {
+        ctx.save();
+        ctx.beginPath();
+        eachCons(lines).map(([l1, l2]) => {
+          const p1 = [(l1.start[0] + l1.end[0]) / 2, (l1.start[1] + l1.end[1]) / 2];
+          const p2 = [(l2.start[0] + l2.end[0]) / 2, (l2.start[1] + l2.end[1]) / 2];
+
+          ctx.lineTo(p1[0] * unitLength, p1[1] * unitLength);
+          ctx.lineTo(p2[0] * unitLength, p2[1] * unitLength);
+        });
+        const thickness = lines.reduce((acc, line) => acc + line.thickness, 0) / lines.length;
+        ctx.lineCap = 'round';
+        ctx.lineWidth = 10 * thickness;
         ctx.stroke();
         ctx.restore();
       }
 
       function drawNode(node) {
         node.children.map(drawNode);
+        // drawLinesOutline(node.lines);
         node.lines.map(drawLine);
       }
 
@@ -108,19 +126,31 @@
         })
       }
 
+      function randomVector(count) {
+        const probabilities = Array(count).fill(null).map(() => 0.75 + Math.random());
+        const sum = probabilities.reduce((acc, p) => acc + p, 0);
+        return probabilities.map((p) => p / sum);
+      }
+
       function growNode(node, depth) {
-        if (depth > 3 + Math.random() * 2) return;
+        if (depth > 4 + Math.random() * 2) return;
         //if (depth > 3) return;
 
         const consLines = eachCons(node.lines);
         const children = consLines.map(([line1, line2]) => {
-          const newLinesCount = depth + 2 + Math.ceil(Math.random() * 5);
+          const newLinesCount = 4 + Math.ceil(Math.random() * 5);
           // const newLinesCount = 4 + depth * 3;
           const splitFn = splitNoisy;
           const points1 = splitFn(line1.start, line1.end, newLinesCount);
           const points2 = splitFn(line2.start, line2.end, newLinesCount);
-          const thickness = (line1.thickness + line2.thickness) / clamp(2, newLinesCount, newLinesCount * 0.6);
-          const lines = zip(points1, points2).map(([start, end]) => ({ start, end, thickness }));
+          const parentThickness = line1.thickness + line2.thickness;
+          const thicknessDistribution = randomVector(newLinesCount);
+          const maxThickness = Math.max(line1.thickness, line2.thickness);
+          const lines = zip(points1, points2).map(([start, end], idx) => ({
+            start,
+            end,
+            thickness: Math.min(thicknessDistribution[idx] * parentThickness * 1.6, maxThickness)
+          }));
           const node = { lines, children: [] };
           growNode(node, depth + 1);
           return node;
