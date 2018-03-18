@@ -18,8 +18,14 @@
       const graph = {
         //lines: [{ start: [-10, -10], end: [11, -11], thickness: 1 }, { start: [-11, 10], end: [10, 9], thickness: 1 }],
         lines: [{ start: [-10, -10], end: [10, -10], thickness: 1 }, { start: [-10, 10], end: [10, 10], thickness: 1 }],
+        //lines: [{ start: [randAround(-10), randAround(-10)], end: [randAround(10), randAround(-10)], thickness: 1 }, { start: [randAround(-10), randAround(10)], end: [randAround(10), randAround(10)], thickness: 1 }],
         children: []
       };
+
+      function randAround(value) {
+        const randOffset = 2 * Math.random() - 1;
+        return value + randOffset * 2;
+      }
 
       function adjustCanvasSize() {
         const width = document.body.clientWidth;
@@ -111,14 +117,14 @@
         return result;
       }
 
-      function splitNoisy(start, end, pointsCount) {
+      function splitNoisy(start, end, pointsCount, randomness) {
         const dx = (end[0] - start[0]) / (pointsCount - 1);
         const dy = (end[1] - start[1]) / (pointsCount - 1);
         const equalPoints = splitEqual(start, end, pointsCount);
 
         return equalPoints.map((point, idx) => {
           if (idx === 0 || idx === equalPoints.length - 1) return point;
-          const amount = (Math.random() - 0.5) / 1.5;
+          const amount = (Math.random() - 0.5) * randomness;
           return [
             clamp(start[0], end[0], point[0] + dx * amount),
             clamp(start[1], end[1], point[1] + dy * amount)
@@ -133,7 +139,7 @@
       }
 
       function growNode(node, depth) {
-        if (depth > 4 + Math.random() * 2) return;
+        if (depth > 3 + Math.random() * 3) return;
         //if (depth > 3) return;
 
         const consLines = eachCons(node.lines);
@@ -141,8 +147,10 @@
           const newLinesCount = 4 + Math.ceil(Math.random() * 5);
           // const newLinesCount = 4 + depth * 3;
           const splitFn = splitNoisy;
-          const points1 = splitFn(line1.start, line1.end, newLinesCount);
-          const points2 = splitFn(line2.start, line2.end, newLinesCount);
+          const randomness1 = Math.random();
+          const randomness2 = 1 - randomness1;
+          const points1 = splitFn(line1.start, line1.end, newLinesCount, randomness1);
+          const points2 = splitFn(line2.start, line2.end, newLinesCount, randomness2);
           const parentThickness = line1.thickness + line2.thickness;
           const thicknessDistribution = randomVector(newLinesCount);
           const maxThickness = Math.max(line1.thickness, line2.thickness);
