@@ -1,0 +1,101 @@
+<html>
+  <head>
+    <title>Aperture</title>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const unitLength = 300;
+      let DEBUG = true;
+
+      const blinds = [];
+      const blindsCount = 500;
+      const initialBlinds = 60;
+      let tiltX = 0;
+      let tiltY = 0;
+      for(let i = 0; i < blindsCount; i++) {
+        const deltaR = i > initialBlinds ? 0.005 + (i - initialBlinds) * 0.0001 : 0; // i * 0.001 * Math.random();
+        const deltaArc = 0.1 + i * 0.001; // 0.1 * Math.random() * 2 * Math.PI;
+        blinds.push({ deltaR, deltaArc });
+      }
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      }
+
+      function adjustTilt(event) {
+        tiltX = ((event.clientX / document.body.clientWidth) - 0.5) * 2;
+        tiltY = ((event.clientY / document.body.clientHeight) - 0.5) * 2;
+        draw();
+      }
+
+      function drawBlind({ deltaR, deltaArc }) {
+        ctx.save();
+        // ctx.beginPath();
+        // ctx.moveTo(-5 * unitLength, 0);
+        // ctx.lineTo(5 * unitLength, 0);
+        ctx.strokeStyle = '#333';
+        ctx.fillStyle = '#fff';
+        // ctx.shadowColor = '#999';
+        // ctx.shadowBlur = 10;
+        ctx.strokeRect(-10 * unitLength, 0, 20 * unitLength, -10*unitLength);
+        ctx.fillRect(-10 * unitLength, 0, 20 * unitLength, -10*unitLength);
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear canvas
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // Move coordinates origin to canvas center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        let arc = 0;
+        let radius = 0.3;
+        blinds.forEach((blind, i) => {
+          arc += blind.deltaArc;
+          radius += blind.deltaR;
+          ctx.save();
+          const factor = i > initialBlinds ? (i - initialBlinds) : 0;
+          ctx.translate(
+            tiltX * (factor) * 0.002 * unitLength,
+            tiltY * (factor) * 0.002 * unitLength
+          );
+          ctx.rotate(arc);
+          ctx.translate(0, -radius * unitLength);
+          drawBlind(blind)
+          ctx.restore();
+        });
+        ctx.restore();
+      }
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('mousemove', adjustTilt);
+      window.addEventListener('resize', draw);
+      draw();
+    </script>
+  </body>
+</html>
