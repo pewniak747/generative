@@ -146,7 +146,7 @@
         console.log("ANGLES", rayAngle, raysAngle)
 
         const steps = 500;
-        const stepLength = 0.015;
+        const stepLength = 0.02;
 
         function calculateRayPoints(ray, angle) {
           const points = [];
@@ -179,6 +179,9 @@
         ctx.rotate(raysAngle) // Rotate based on "main" axis
         ctx.translate(-x(prismCenter[0]), -y(prismCenter[1]));
 
+        const pointsCount = raysWithPoints[0][1].length;
+
+        /*
         // Draw rays sequentially
         raysWithPoints.forEach(([ray, points]) => {
           console.log("DRAWING RAY", ray.color);
@@ -202,16 +205,24 @@
           ctx.fill();
           ctx.closePath();
         });
+        */
+
+        const rayOrder = raysWithPoints
+          .map((r, rayIdx) => [...r, rayIdx])
+          .sort(([_ray1, points1], [_ray2, points2]) => points2[0].z - points1[0].z)
+          .map(([_ray, _points, rayIdx]) => rayIdx);
+        console.log(rayOrder);
 
         // Draw rays in parallel
-        const pointsCount = raysWithPoints[0][1].length;
         /*
-        console.log(raysWithPoints);
         for (let step = 0; step < pointsCount; step += 1) {
-          const raysWithPointsAtStep = raysWithPoints.map(([ray, points]) => [ray, points[step]]);
-          raysWithPointsAtStep.sort(([_ray1, point1], [_ray2, point2]) => point2.z - point1.z);
+          // Adjust ray order
+          // const raysWithPointsAtStep = raysWithPoints.map(([ray, points]) => [ray, points[step]]);
+          // raysWithPointsAtStep.sort(([_ray1, point1], [_ray2, point2]) => point2.z - point1.z);
 
-          raysWithPointsAtStep.forEach(([ray, point]) => {
+          rayOrder.forEach((rayIdx) => {
+            const ray = raysWithPoints[rayIdx][0];
+            const point = raysWithPoints[rayIdx][1][step];
             // console.log("POINT", point, "RAY", ray);
             ctx.beginPath();
             const nextY = y(point.y);
@@ -219,13 +230,43 @@
             ctx.arc(nextX, nextY, scale(point.thickness), 0, 2 * Math.PI);
             ctx.strokeStyle = ray.color;
             ctx.fillStyle = ray.color;
-            ctx.lineWidth = 3;
-            ctx.stroke();
+            //ctx.lineWidth = 3;
+            //ctx.stroke();
             ctx.fill();
             ctx.closePath();
           });
         }
         */
+
+        // Draw rays like a paintbrush
+
+        const currentBrushSteps = raysWithPoints.map(() => 0);
+
+        function brush(rayIdx) {
+          const currentStep = currentBrushSteps[rayIdx];
+          const ray = raysWithPoints[rayIdx][0];
+          const points = raysWithPoints[rayIdx][1];
+          if (currentStep + 1 > points.length) return;
+          if (rayOrder[rayIdx] !== rayOrder[rayIdx]) return; // TODO: different orders on steps
+
+          const point = points[currentStep];
+          ctx.beginPath();
+          const nextY = y(point.y);
+          const nextX = x(point.x);
+          ctx.arc(nextX, nextY, scale(point.thickness), 0, 2 * Math.PI);
+          ctx.strokeStyle = ray.color;
+          ctx.fillStyle = ray.color;
+          ctx.fill();
+          ctx.closePath();
+
+          currentBrushSteps[rayIdx] += 1;
+          brush(rayIdx);
+        };
+
+        rayOrder.slice().reverse().forEach(rayIdx => {
+          brush(rayIdx);
+        });
+
         ctx.restore();
       }
 
