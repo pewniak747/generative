@@ -71,7 +71,6 @@
       }
 
       function handleCanvasClick(event) {
-        console.log(event);
         const rayOrigin = [invertX(event.x), invertY(event.y)];
         state.rayOrigin = rayOrigin;
         draw();
@@ -143,9 +142,8 @@
         const rayOrigin = state.rayOrigin;
         const rayAngle = Math.atan2((rayOrigin[1] - prismCenter[1]), (prismCenter[0] - rayOrigin[0]));
         const raysAngle = rayAngle / -2;
-        console.log("ANGLES", rayAngle, raysAngle)
 
-        const steps = 500;
+        const steps = 400;
         const stepLength = 0.02;
 
         function calculateRayPoints(ray, angle) {
@@ -156,10 +154,11 @@
             const rotationBasis = ((angle - raysAngle) / raysAngle) * 2 * Math.PI + step * stepLength;
             const rotation = Math.sin(rotationBasis) / 5;
             // const nextY = (Math.pow(1.065, 40 * Math.log(1 + step * stepLength)) - 1) * deviation * rotation;
+            // const nextY = (Math.pow(1.05, 40 * Math.log(1 + step * stepLength)) - 1) * deviation * rotation;
             const nextY = (Math.pow(1.05, 40 * Math.log(1 + step * stepLength)) - 1) * deviation * rotation;
             // const nextY = step * stepLength * Math.tan(angle);
             const nextX = step * stepLength;
-            const nextThickness = step * stepLength * 0.05;
+            const nextThickness = step * stepLength * 0.05 * Math.pow(1.1, step * stepLength);
             const nextZ = Math.cos(rotationBasis);
             points.push({ x: nextX, y: nextY, z: nextZ, thickness: nextThickness });
           }
@@ -173,7 +172,8 @@
         });
 
 
-        // Draw rays!
+        // Draw rays in segments, like a paintbrush
+
         ctx.save();
         ctx.translate(x(prismCenter[0]), y(prismCenter[1]));
         ctx.rotate(raysAngle) // Rotate based on "main" axis
@@ -181,12 +181,47 @@
 
         const pointsCount = raysWithPoints[0][1].length;
 
-        /*
-        // Draw rays sequentially
-        raysWithPoints.forEach(([ray, points]) => {
-          console.log("DRAWING RAY", ray.color);
+        const rayOrder = raysWithPoints
+          .map((r, rayIdx) => [...r, rayIdx])
+          .sort(([_ray1, points1], [_ray2, points2]) => points2[0].z - points1[0].z)
+          .map(([_ray, _points, rayIdx]) => rayIdx);
+
+        // Calculate continuous segments
+        const raysWithSegments = raysWithPoints.map(([ray, points], currentRayIdx) => {
+            const otherRayPoints = raysWithPoints
+              .reduce((acc, [ray, points], rayIdx) =>
+                rayIdx !== currentRayIdx ? [...acc, ...points] : acc, []);
+            const segments = [];
+            for (let step = 0; step < points.length; step += 1) {
+              if (segments.length === 0) segments.push({ start: step, end: step, free: false });
+              const currentSegment = segments[segments.length - 1];
+              const currentPoint = points[step];
+              const isPointFree = otherRayPoints.every(p => notOverlapping(p, currentPoint));
+              if (isPointFree && !currentSegment.free) {
+                currentSegment.free = true;
+                currentSegment.end += 1;
+              } else if (!isPointFree && currentSegment.free) {
+                segments.push({ start: step, end: step, free: false });
+              } else {
+                currentSegment.end += 1;
+              }
+            }
+            return { ray, segments };
+        });
+
+        console.log("RAYS WITH SEGMENTS", raysWithSegments);
+
+        function notOverlapping(point1, point2, minGap = 0.02) {
+          return distance2d([point1.x, point1.y], [point2.x, point2.y]) > point1.thickness + point2.thickness + minGap;
+        }
+
+        function brushSegment(rayIdx, segment) {
+          const ray = raysWithPoints[rayIdx][0];
+          const allPoints = raysWithPoints[rayIdx][1];
+          console.log("DRAWING RAY SEGMENT", ray.color, segment);
           ctx.beginPath();
-          ctx.moveTo(x(0), y(0));
+          const points = allPoints.slice(segment.start, segment.end + 1);
+          ctx.moveTo(x(points[0].x), y(points[0].y));
           points.forEach((point, step) => {
             const nextY = y(point.y);
             const nextX = x(point.x);
@@ -198,74 +233,30 @@
           points.slice().reverse().forEach(point => {
             ctx.lineTo(x(point.x), y(point.y));
           });
+          ctx.closePath();
           ctx.strokeStyle = ray.color;
           ctx.fillStyle = ray.color;
           ctx.lineWidth = 3;
           ctx.stroke();
           ctx.fill();
-          ctx.closePath();
-        });
-        */
-
-        const rayOrder = raysWithPoints
-          .map((r, rayIdx) => [...r, rayIdx])
-          .sort(([_ray1, points1], [_ray2, points2]) => points2[0].z - points1[0].z)
-          .map(([_ray, _points, rayIdx]) => rayIdx);
-        console.log(rayOrder);
-
-        // Draw rays in parallel
-        /*
-        for (let step = 0; step < pointsCount; step += 1) {
-          // Adjust ray order
-          // const raysWithPointsAtStep = raysWithPoints.map(([ray, points]) => [ray, points[step]]);
-          // raysWithPointsAtStep.sort(([_ray1, point1], [_ray2, point2]) => point2.z - point1.z);
-
-          rayOrder.forEach((rayIdx) => {
-            const ray = raysWithPoints[rayIdx][0];
-            const point = raysWithPoints[rayIdx][1][step];
-            // console.log("POINT", point, "RAY", ray);
-            ctx.beginPath();
-            const nextY = y(point.y);
-            const nextX = x(point.x);
-            ctx.arc(nextX, nextY, scale(point.thickness), 0, 2 * Math.PI);
-            ctx.strokeStyle = ray.color;
-            ctx.fillStyle = ray.color;
-            //ctx.lineWidth = 3;
-            //ctx.stroke();
-            ctx.fill();
-            ctx.closePath();
-          });
         }
-        */
 
-        // Draw rays like a paintbrush
+        function brushAllSegments(rayOrder, segmentIdx) {
+          rayOrder.slice().reverse().forEach(rayIdx => {
+            if (raysWithSegments[rayIdx].segments[segmentIdx]) {
+              brushSegment(rayIdx, raysWithSegments[rayIdx].segments[segmentIdx]);
+            }
+          })
+        }
 
-        const currentBrushSteps = raysWithPoints.map(() => 0);
+        const maxSegments = raysWithSegments.reduce((acc, { segments }) => Math.max(acc, segments.length), 0);
 
-        function brush(rayIdx) {
-          const currentStep = currentBrushSteps[rayIdx];
-          const ray = raysWithPoints[rayIdx][0];
-          const points = raysWithPoints[rayIdx][1];
-          if (currentStep + 1 > points.length) return;
-          if (rayOrder[rayIdx] !== rayOrder[rayIdx]) return; // TODO: different orders on steps
+        for (let segmentIdx = 0; segmentIdx < maxSegments; segmentIdx += 1) {
+          brushAllSegments(rayOrder, segmentIdx);
 
-          const point = points[currentStep];
-          ctx.beginPath();
-          const nextY = y(point.y);
-          const nextX = x(point.x);
-          ctx.arc(nextX, nextY, scale(point.thickness), 0, 2 * Math.PI);
-          ctx.strokeStyle = ray.color;
-          ctx.fillStyle = ray.color;
-          ctx.fill();
-          ctx.closePath();
-
-          currentBrushSteps[rayIdx] += 1;
-          brush(rayIdx);
-        };
-
-        rayOrder.slice().reverse().forEach(rayIdx => {
-          brush(rayIdx);
-        });
+          // Change ray order
+          rayOrder.reverse();
+        }
 
         ctx.restore();
       }
