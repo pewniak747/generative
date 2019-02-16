@@ -14,7 +14,7 @@
     <script>
       const canvas = document.querySelector('canvas');
       const ctx = canvas.getContext('2d');
-      const unitLength = 150;
+      const unitLength = 100;
       let DEBUG = false;
 
       const state = {
@@ -157,14 +157,14 @@
         const rayAngle = Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
         const raysAngle = rayAngle / -2;
 
-        const steps = 400;
+        const steps = 500;
         const stepLength = 0.02;
 
         function calculateRayPoints(ray, angle) {
           const points = [];
 
           for(let step = 0; step < steps; step+=1) {
-            const deviation = ray.seed * 0.5;
+            const deviation = ray.seed * 0.2;
             const rotationBasis = ((angle - raysAngle) / raysAngle) * 2 * Math.PI + step * stepLength;
             const rotation = Math.sin(rotationBasis) / 5;
             // const nextY = (Math.pow(1.065, 40 * Math.log(1 + step * stepLength)) - 1) * deviation * rotation;
@@ -172,7 +172,7 @@
             const nextY = (Math.pow(1.05, 40 * Math.log(1 + step * stepLength)) - 1) * deviation * rotation;
             // const nextY = step * stepLength * Math.tan(angle);
             const nextX = step * stepLength;
-            const nextThickness = step * stepLength * 0.05 * Math.pow(1.1, step * stepLength);
+            const nextThickness = step * stepLength * 0.02 * Math.pow(1.05, step * stepLength);
             const nextZ = Math.cos(rotationBasis);
             points.push({ x: nextX, y: nextY, z: nextZ, thickness: nextThickness });
           }
@@ -226,7 +226,10 @@
         console.log("RAYS WITH SEGMENTS", raysWithSegments);
 
         function notOverlapping(point1, point2, minGap = 0.02) {
-          return distance2d([point1.x, point1.y], [point2.x, point2.y]) > point1.thickness + point2.thickness + minGap;
+          const minDistance = point1.thickness + point2.thickness + minGap;
+          if (Math.abs(point1.x - point2.x) > minDistance) return true;
+          if (Math.abs(point1.y - point2.y) > minDistance) return true;
+          return distance2d([point1.x, point1.y], [point2.x, point2.y]) > minDistance;
         }
 
         function brushSegment(rayIdx, segment) {
