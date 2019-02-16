@@ -15,7 +15,7 @@
       const canvas = document.querySelector('canvas');
       const ctx = canvas.getContext('2d');
       const unitLength = 150;
-      let DEBUG = true;
+      let DEBUG = false;
 
       const state = {
         prismCenter: [0, 0],
@@ -45,13 +45,13 @@
       }
       // Put the origin of the coordinates system on the left of the of canvas
       function x(value) {
-        return canvas.width / 3 + scale(value);
+        return canvas.width / 4 + scale(value);
       }
       function y(value) {
         return canvas.height / 2 + scale(value);
       }
       function invertX(xValue) {
-        const value = (xValue - canvas.width / devicePixelRatio / 3) / unitLength;
+        const value = (xValue - canvas.width / devicePixelRatio / 4) / unitLength;
         console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001);
         return value;
       }
@@ -95,42 +95,56 @@
         const prismEdge = 1;
         const prismHeight = prismEdge * Math.sqrt(3) / 2;
 
-        // Draw prism center
-        ctx.save();
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x(prismCenter[0]), y(prismCenter[1]), 3, 0, 2 * Math.PI);
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
+        if (DEBUG) {
+          // Draw prism center
+          ctx.save();
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x(prismCenter[0]), y(prismCenter[1]), 3, 0, 2 * Math.PI);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        }
 
         // Draw prism triangle
         ctx.save();
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x(prismCenter[0]), y(prismCenter[1] - prismHeight * 2 / 3));
         ctx.lineTo(x(prismCenter[0] + prismEdge / 2), y(prismCenter[1] + prismHeight / 3));
         ctx.lineTo(x(prismCenter[0] - prismEdge / 2), y(prismCenter[1] + prismHeight / 3));
         ctx.closePath();
-        ctx.stroke();
+
+        if (DEBUG) {
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        } else {
+          ctx.shadowColor = "#eee";
+          ctx.shadowBlur = 30;
+          ctx.fillStyle = "white";
+          ctx.fill();
+        }
         ctx.restore();
       }
 
       function drawRay() {
-        const prismCenter = state.prismCenter;
+        const rayTarget = state.prismCenter;
         const rayOrigin = state.rayOrigin;
         const farRayOrigin = [
-          (rayOrigin[0] - prismCenter[0]) * 30,
-          (rayOrigin[1] - prismCenter[1]) * 30,
+          (rayOrigin[0] - rayTarget[0]) * 30,
+          (rayOrigin[1] - rayTarget[1]) * 30,
         ];
 
         ctx.save();
-        ctx.strokeStyle = "#000";
+        if (DEBUG) {
+          ctx.strokeStyle = "#000";
+        } else {
+          ctx.strokeStyle = "yellow";
+        }
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(x(prismCenter[0]), y(prismCenter[1]));
+        ctx.moveTo(x(rayTarget[0]), y(rayTarget[1]));
         ctx.lineTo(x(farRayOrigin[0]), y(farRayOrigin[1]));
         ctx.closePath();
         ctx.stroke();
@@ -138,9 +152,9 @@
       }
 
       function drawRays() {
-        const prismCenter = state.prismCenter;
+        const raysOrigin = state.prismCenter;
         const rayOrigin = state.rayOrigin;
-        const rayAngle = Math.atan2((rayOrigin[1] - prismCenter[1]), (prismCenter[0] - rayOrigin[0]));
+        const rayAngle = Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
         const raysAngle = rayAngle / -2;
 
         const steps = 400;
@@ -175,9 +189,9 @@
         // Draw rays in segments, like a paintbrush
 
         ctx.save();
-        ctx.translate(x(prismCenter[0]), y(prismCenter[1]));
+        ctx.translate(x(raysOrigin[0]), y(raysOrigin[1]));
         ctx.rotate(raysAngle) // Rotate based on "main" axis
-        ctx.translate(-x(prismCenter[0]), -y(prismCenter[1]));
+        ctx.translate(-x(raysOrigin[0]), -y(raysOrigin[1]));
 
         const pointsCount = raysWithPoints[0][1].length;
 
@@ -219,26 +233,25 @@
           const ray = raysWithPoints[rayIdx][0];
           const allPoints = raysWithPoints[rayIdx][1];
           console.log("DRAWING RAY SEGMENT", ray.color, segment);
-          ctx.beginPath();
           const points = allPoints.slice(segment.start, segment.end + 1);
-          ctx.moveTo(x(points[0].x), y(points[0].y));
           points.forEach((point, step) => {
-            const nextY = y(point.y);
-            const nextX = x(point.x);
-            if (DEBUG) {
-              ctx.arc(nextX, nextY, scale(point.thickness), 0, 2 * Math.PI);
+            const nextPoint = points[step + 1];
+            if (!nextPoint) return;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x(point.x), y(point.y));
+            if (!DEBUG) {
+              ctx.lineWidth = scale(point.thickness * 2);
+            } else {
+              ctx.lineWidth = 3;
             }
-            ctx.lineTo(nextX, nextY);
+            ctx.lineTo(x(nextPoint.x), y(nextPoint.y));
+            ctx.lineCap = "round";
+            ctx.strokeStyle = ray.color;
+            ctx.stroke();
+            ctx.restore();
           });
-          points.slice().reverse().forEach(point => {
-            ctx.lineTo(x(point.x), y(point.y));
-          });
-          ctx.closePath();
-          ctx.strokeStyle = ray.color;
-          ctx.fillStyle = ray.color;
-          ctx.lineWidth = 3;
-          ctx.stroke();
-          ctx.fill();
         }
 
         function brushAllSegments(rayOrder, segmentIdx) {
@@ -262,8 +275,6 @@
       }
 
       function drawRayOrigin() {
-        if (!DEBUG) return;
-
         const draggedPosition = state.rayOrigin;
 
         // Draw dragging point
@@ -289,7 +300,9 @@
         ctx.restore();
 
         drawPrism();
-        drawRayOrigin();
+        if (DEBUG) {
+          drawRayOrigin();
+        }
         drawRay();
         drawRays();
       }
