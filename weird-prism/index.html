@@ -15,11 +15,12 @@
       const canvas = document.querySelector('canvas');
       const ctx = canvas.getContext('2d');
       const unitLength = 100;
-      let DEBUG = false;
+      let DEBUG = true;
 
       const state = {
         prismCenter: [0, 0],
-        rayOrigin: [-1, 1],
+        prismEdge: 1,
+        rayOrigin: [-0.8, -0.6],
         rays: [{
           color: "#e6261f"
         }, {
@@ -39,6 +40,7 @@
         }].map(r => ({ ...r, seed: Math.random() }))
       };
 
+      // Positioning
       const devicePixelRatio = window.devicePixelRatio || 1;
       function scale(value) {
         return value * unitLength * devicePixelRatio;
@@ -61,6 +63,7 @@
         return value;
       }
 
+      // Event handlers
       function adjustCanvasSize() {
         const width = document.body.clientWidth;
         const height = document.body.clientHeight;
@@ -72,7 +75,7 @@
 
       function handleCanvasClick(event) {
         const rayOrigin = [invertX(event.x), invertY(event.y)];
-        state.rayOrigin = rayOrigin;
+        updateRayOrigin(rayOrigin);
         draw();
       }
       function handleCanvasMousedown(event) {
@@ -83,17 +86,56 @@
       }
       function handleCanvasMousemove(event) {
         if (!state.dragging) return;
-
         const rayOrigin = [invertX(event.x), invertY(event.y)];
-
-        state.rayOrigin = rayOrigin;
+        updateRayOrigin(rayOrigin);
         draw();
       }
 
+      function updateRayOrigin(rayOrigin) {
+        const oldRayOrigin = state.rayOrigin;
+        state.rayOrigin = rayOrigin;
+        const angle = getFirstRefractionInAngle();
+
+        // Revert the ray origin change if the ray falls behind the prism wall
+        if (angle < Math.PI/-2 || angle > Math.PI/2) {
+          state.rayOrigin = oldRayOrigin;
+        }
+        console.log("FIRST REF IN ANGLE", getFirstRefractionInAngle());
+      }
+
+      // Refraction calculation
+      function getPrismHeight() {
+        return state.prismEdge * Math.sqrt(3) / 2;
+      }
+
+      function getFirstRefractionPoint() {
+        const prismHeight = getPrismHeight();
+        return [
+          state.prismCenter[0] - state.prismEdge / 4,
+          state.prismCenter[1] - prismHeight / 6
+        ];
+      }
+
+      // https://stackoverflow.com/questions/1211212/how-to-calculate-an-angle-from-three-points
+      function getFirstRefractionInAngle() {
+        const prismHeight = getPrismHeight();
+        const P1 = getFirstRefractionPoint();
+        const P2 = [
+          state.prismCenter[0] - state.prismEdge / 2,
+          state.prismCenter[1] - prismHeight / 3,
+        ];
+        const P3 = state.rayOrigin;
+        const angle = (Math.atan2(P3[1] - P1[1], P3[0] - P1[0]) -
+                       Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) +
+                       2 * Math.PI) % (2 * Math.PI);
+        return angle > Math.PI ? angle - 2 * Math.PI : angle;
+      }
+
+      // Drawing
       function drawPrism() {
         const prismCenter = state.prismCenter;
-        const prismEdge = 1;
-        const prismHeight = prismEdge * Math.sqrt(3) / 2;
+        const prismEdge = state.prismEdge;
+        const prismHeight = getPrismHeight();
 
         if (DEBUG) {
           // Draw prism center
@@ -129,7 +171,7 @@
       }
 
       function drawRay() {
-        const rayTarget = state.prismCenter;
+        const rayTarget = getFirstRefractionPoint();
         const rayOrigin = state.rayOrigin;
         const farRayOrigin = [
           (rayOrigin[0] - rayTarget[0]) * 30,
@@ -235,7 +277,7 @@
         function brushSegment(rayIdx, segment) {
           const ray = raysWithPoints[rayIdx][0];
           const allPoints = raysWithPoints[rayIdx][1];
-          console.log("DRAWING RAY SEGMENT", ray.color, segment);
+          // console.log("DRAWING RAY SEGMENT", ray.color, segment);
           const points = allPoints.slice(segment.start, segment.end + 1);
           points.forEach((point, step) => {
             const nextPoint = points[step + 1];
@@ -277,15 +319,25 @@
         ctx.restore();
       }
 
-      function drawRayOrigin() {
-        const draggedPosition = state.rayOrigin;
-
+      function drawRayDebugPoints() {
         // Draw dragging point
+        const draggedPosition = state.rayOrigin;
         ctx.save();
         ctx.strokeStyle = "red";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x(draggedPosition[0]), y(draggedPosition[1]), 3, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw first refraction point
+        const firstRefractionPoint = getFirstRefractionPoint();
+        ctx.save();
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]), 3, 0, 2 * Math.PI);
         ctx.closePath();
         ctx.stroke();
         ctx.restore();
@@ -298,13 +350,17 @@
         ctx.closePath();
         // Clear canvas
         ctx.save();
-        ctx.fillStyle = '#fff';
+        if (DEBUG) {
+          ctx.fillStyle = '#fff';
+        } else {
+          ctx.fillStyle = '#000';
+        }
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
 
         drawPrism();
         if (DEBUG) {
-          drawRayOrigin();
+          drawRayDebugPoints();
         }
         drawRay();
         drawRays();
