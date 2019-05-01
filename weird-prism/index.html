@@ -101,41 +101,77 @@
           state.rayOrigin = oldRayOrigin;
         }
         console.log("FIRST REF IN ANGLE", getFirstRefractionInAngle());
+        console.log("FIRST REF OUT ANGLE", getFirstRefractionOutAngle());
       }
 
       // Refraction calculation
-      function getPrismHeight() {
-        return state.prismEdge * Math.sqrt(3) / 2;
+      const prismRefractiveIndex = 1.52;
+      const airRefractiveIndex = 1.0;
+
+      function getPrismVertices() {
+        const prismHeight = state.prismEdge * Math.sqrt(3) / 2;
+        const a = [
+          state.prismCenter[0] - state.prismEdge / 2,
+          state.prismCenter[1] + prismHeight / 3
+        ];
+        const b = [
+          state.prismCenter[0],
+          state.prismCenter[1] - prismHeight * 2 / 3
+        ];
+        const c = [
+          state.prismCenter[0] + state.prismEdge / 2,
+          state.prismCenter[1] + prismHeight / 3
+        ];
+        return [a, b, c];
+      }
+
+      function getPrismRayInWall() {
+        const [a, b, c] = getPrismVertices();
+
+        return [a, b];
+      }
+
+      function getPrismRayOutWalls() {
+        const [a, b, c] = getPrismVertices();
+
+        return [[b, c], [c, a]];
       }
 
       function getFirstRefractionPoint() {
-        const prismHeight = getPrismHeight();
+        const [a, b] = getPrismRayInWall();
+
         return [
-          state.prismCenter[0] - state.prismEdge / 4,
-          state.prismCenter[1] - prismHeight / 6
+          (a[0] + b[0]) / 2,
+          (a[1] + b[1]) / 2
         ];
       }
 
       // https://stackoverflow.com/questions/1211212/how-to-calculate-an-angle-from-three-points
       function getFirstRefractionInAngle() {
-        const prismHeight = getPrismHeight();
         const P1 = getFirstRefractionPoint();
-        const P2 = [
-          state.prismCenter[0] - state.prismEdge / 2,
-          state.prismCenter[1] - prismHeight / 3,
-        ];
+        const P2 = getPrismRayInWall()[0];
         const P3 = state.rayOrigin;
         const angle = (Math.atan2(P3[1] - P1[1], P3[0] - P1[0]) -
                        Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) +
                        2 * Math.PI) % (2 * Math.PI);
-        return angle > Math.PI ? angle - 2 * Math.PI : angle;
+        return angle - Math.PI / 2;
+      }
+
+      function getFirstRefractionOutAngle() {
+        const inAngle = getFirstRefractionInAngle();
+
+        return Math.asin(airRefractiveIndex / prismRefractiveIndex * Math.sin(inAngle));
+      }
+
+      function getSecondRefractionPoint() {
+        return [1, 1];
       }
 
       // Drawing
       function drawPrism() {
         const prismCenter = state.prismCenter;
         const prismEdge = state.prismEdge;
-        const prismHeight = getPrismHeight();
+        const [a, b, c] = getPrismVertices();
 
         if (DEBUG) {
           // Draw prism center
@@ -147,14 +183,26 @@
           ctx.closePath();
           ctx.stroke();
           ctx.restore();
+
+          // Draw prism vertices
+          getPrismVertices().forEach(point => {
+            ctx.save();
+            ctx.strokeStyle = "blue";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x(point[0]), y(point[1]), 3, 0, 2 * Math.PI);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          });
         }
 
         // Draw prism triangle
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(x(prismCenter[0]), y(prismCenter[1] - prismHeight * 2 / 3));
-        ctx.lineTo(x(prismCenter[0] + prismEdge / 2), y(prismCenter[1] + prismHeight / 3));
-        ctx.lineTo(x(prismCenter[0] - prismEdge / 2), y(prismCenter[1] + prismHeight / 3));
+        ctx.moveTo(x(a[0]), y(a[1]));
+        ctx.lineTo(x(b[0]), y(b[1]));
+        ctx.lineTo(x(c[0]), y(c[1]));
         ctx.closePath();
 
         if (DEBUG) {
@@ -338,6 +386,17 @@
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]), 3, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw second refraction point
+        const secondRefractionPoint = getSecondRefractionPoint();
+        ctx.save();
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]), 3, 0, 2 * Math.PI);
         ctx.closePath();
         ctx.stroke();
         ctx.restore();
