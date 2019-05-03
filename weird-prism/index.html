@@ -20,7 +20,7 @@
       const state = {
         prismCenter: [0, 0],
         prismEdge: 1,
-        rayOrigin: [-0.8, -0.6],
+        rayOrigin: [-1.1675, 0.185],
         rays: [{
           color: "#e6261f"
         }, {
@@ -163,8 +163,37 @@
         return Math.asin(airRefractiveIndex / prismRefractiveIndex * Math.sin(inAngle));
       }
 
+      // https://academo.org/demos/rotation-about-point
+      function rotate(point, origin, angle) {
+        return [
+          ((point[0] - origin[0]) * Math.cos(angle) - (point[1] - origin[1]) * Math.sin(angle)) + origin[0],
+          ((point[1] - origin[1]) * Math.cos(angle) + (point[0] - origin[0]) * Math.sin(angle)) + origin[1]
+        ];
+      }
+
       function getSecondRefractionPoint() {
-        return [1, 1];
+        const angle = getFirstRefractionOutAngle();
+        const rayStart = getFirstRefractionPoint();
+        const rayEnd = rotate(getPrismVertices()[0], rayStart, angle - Math.PI / 2);
+        const ray = [rayStart, rayEnd];
+        let point = null;
+        getPrismRayOutWalls().forEach(wall => {
+          point = point || intersectionWithPrismWall(ray, wall);
+        });
+        return point || [1, 1];
+      }
+
+      // https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line
+      function intersectionWithPrismWall(ray, wall) {
+        const [[x1, y1], [x2, y2]] = ray;
+        const [[x3, y3], [x4, y4]] = wall;
+        const u = -1 * ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4));
+        if (0 <= u && u <= 1) {
+          return [
+            x3 + u * (x4 - x3),
+            y3 + u * (y4 - y3)
+          ];
+        } else return null;
       }
 
       // Drawing
@@ -176,7 +205,7 @@
         if (DEBUG) {
           // Draw prism center
           ctx.save();
-          ctx.strokeStyle = "red";
+          ctx.strokeStyle = "blue";
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.arc(x(prismCenter[0]), y(prismCenter[1]), 3, 0, 2 * Math.PI);
@@ -219,11 +248,11 @@
       }
 
       function drawRay() {
-        const rayTarget = getFirstRefractionPoint();
+        const firstRefractionPoint = getFirstRefractionPoint();
         const rayOrigin = state.rayOrigin;
         const farRayOrigin = [
-          (rayOrigin[0] - rayTarget[0]) * 30,
-          (rayOrigin[1] - rayTarget[1]) * 30,
+          (rayOrigin[0] - firstRefractionPoint[0]) * 30,
+          (rayOrigin[1] - firstRefractionPoint[1]) * 30,
         ];
 
         ctx.save();
@@ -234,18 +263,33 @@
         }
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(x(rayTarget[0]), y(rayTarget[1]));
+        ctx.moveTo(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]));
         ctx.lineTo(x(farRayOrigin[0]), y(farRayOrigin[1]));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+
+        const secondRefractionPoint = getSecondRefractionPoint();
+        ctx.save();
+        if(DEBUG) {
+          ctx.strokeStyle = "#000";
+        } else {
+          ctx.strokeStyle = "yellow";
+        }
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]));
+        ctx.lineTo(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]));
         ctx.closePath();
         ctx.stroke();
         ctx.restore();
       }
 
       function drawRays() {
-        const raysOrigin = state.prismCenter;
+        const raysOrigin = getSecondRefractionPoint();
         const rayOrigin = state.rayOrigin;
-        const rayAngle = Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
-        const raysAngle = rayAngle / -2;
+        const rayAngle = getFirstRefractionOutAngle(); // TODO Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
+        const raysAngle = rayAngle / 1; // TODO
 
         const steps = 500;
         const stepLength = 0.02;
@@ -275,13 +319,20 @@
           return [ray, rayPoints];
         });
 
-
         // Draw rays in segments, like a paintbrush
 
         ctx.save();
+        // console.log("RAY ORIGIN", raysOrigin);
         ctx.translate(x(raysOrigin[0]), y(raysOrigin[1]));
         ctx.rotate(raysAngle) // Rotate based on "main" axis
-        ctx.translate(-x(raysOrigin[0]), -y(raysOrigin[1]));
+        // ctx.translate(-x(raysOrigin[0]), -y(raysOrigin[1]));
+
+        // ctx.arc(x(0), y(0), 5, 0, 2* Math.PI)
+        // ctx.stroke();
+        // ctx.arc(0, 0, 10, 0, 2* Math.PI)
+        // ctx.stroke();
+        // ctx.restore();
+        // return;
 
         const pointsCount = raysWithPoints[0][1].length;
 
@@ -313,8 +364,6 @@
             return { ray, segments };
         });
 
-        console.log("RAYS WITH SEGMENTS", raysWithSegments);
-
         function notOverlapping(point1, point2, minGap = 0.02) {
           const minDistance = point1.thickness + point2.thickness + minGap;
           if (Math.abs(point1.x - point2.x) > minDistance) return true;
@@ -333,13 +382,13 @@
 
             ctx.save();
             ctx.beginPath();
-            ctx.moveTo(x(point.x), y(point.y));
+            ctx.moveTo(scale(point.x), scale(point.y));
             if (!DEBUG) {
               ctx.lineWidth = scale(point.thickness * 2);
             } else {
               ctx.lineWidth = 3;
             }
-            ctx.lineTo(x(nextPoint.x), y(nextPoint.y));
+            ctx.lineTo(scale(nextPoint.x), scale(nextPoint.y));
             ctx.lineCap = "round";
             ctx.strokeStyle = ray.color;
             ctx.stroke();
