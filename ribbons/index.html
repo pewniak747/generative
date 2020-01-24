@@ -22,16 +22,21 @@
     const state = {
       ribbons: [
         {
-          thickness: 0.1,
+          thickness: 0.3,
           color: "#eee",
           undersideColor: "#ddd",
+          finished: false,
           segments: [{
             start: { x: 0, y: 0 },
             end: { x: 0, y: 0.5 },
           }]
         }
       ],
-      maxRibbonLength: 50
+      maxRibbonLength: 50,
+      bounds: {
+        upperLeftCorner: { x: -5, y: 5 },
+        lowerRightCorner: { x: 5, y: -5 }
+      }
     };
 
     // Positioning
@@ -81,6 +86,17 @@
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
+
+      if (DEBUG) {
+        ctx.save();
+        ctx.moveTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.lineTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
 
       drawRibbons();
     }
@@ -220,32 +236,54 @@
       })
     }
 
-    function appendRibbonSegment(ribbon) {
-      if (ribbon.segments.length >= state.maxRibbonLength) return;
+    function pointWithinBounds(point) {
+      return state.bounds.upperLeftCorner.x <= point.x &&
+        point.x <= state.bounds.lowerRightCorner.x &&
+        state.bounds.lowerRightCorner.y <= point.y &&
+        point.y <= state.bounds.upperLeftCorner.y;
+    }
 
-      const lastSegment = ribbon.segments[ribbon.segments.length - 1];
-      const lastAbsoluteAngle = Math.atan2((lastSegment.end.x - lastSegment.start.x), (lastSegment.end.y - lastSegment.start.y));
+    function isSegmentValid(ribbons, segmentRibbon, segment) {
+      if (!pointWithinBounds(segment.end)) return false;
 
-      function isSegmentValid(segment) {
+      return ribbons.every(ribbon => {
         return ribbon.segments.every((existingSegment, idx) => {
-          if (idx == ribbon.segments.length - 1) return true;
+          // Don't check the intersection with the preceding segment
+          // Common preceding segment end and current segment start,
+          // with some minimum angle between segments, guarantee that
+          // they won't intersect.
+          if (ribbon === segmentRibbon && idx == ribbon.segments.length - 1) return true;
 
+          // Segments can't intersect each other
           const intersection = lineIntersectionPoint(
             segment.start.x, segment.start.y, segment.end.x, segment.end.y,
             existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y,
           );
           if (intersection.segmentsIntersect) return false;
 
-          const distance = segmentPointDistance(segment.end.x, segment.end.y, existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y);
+          // Segments must be in a certain minimum distance of each other
+          // to avoid overlapping when drawn
+          const distance = segmentPointDistance(
+            segment.end.x, segment.end.y,
+            existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y
+          );
           const minGap = 0.1
           if (distance < ribbon.thickness + minGap) return false;
+
           return true;
         });
-      }
+      });
+    }
+
+    function appendRibbonSegment(ribbon) {
+      if (ribbon.segments.length >= state.maxRibbonLength) return;
+
+      const lastSegment = ribbon.segments[ribbon.segments.length - 1];
+      const lastAbsoluteAngle = Math.atan2((lastSegment.end.x - lastSegment.start.x), (lastSegment.end.y - lastSegment.start.y));
 
       let newSegment = null;
       let iterations = 0;
-      while (!newSegment && iterations < 20) {
+      while (!newSegment && iterations < 30) {
         // const angle = (Math.random() - 0.5) * Math.PI / 2;
         const angle = Math.sign(Math.random() - 0.5) * ((Math.PI / 2) + (Math.random() * Math.PI / 4))
         const length = 0.5 * (Math.random() + 1);
@@ -256,18 +294,72 @@
           end: { x: newSegmentEndX, y: newSegmentEndY }
         }
 
-        if (isSegmentValid(newSegmentCandidate)) {
+        if (isSegmentValid(state.ribbons, ribbon, newSegmentCandidate)) {
           newSegment = newSegmentCandidate;
         }
         iterations += 1;
       }
       if (newSegment) {
         ribbon.segments.push(newSegment);
+      } else {
+        ribbon.finished = true;
       }
     }
 
     function appendRibbonsSegments() {
-      state.ribbons.forEach(ribbon => appendRibbonSegment(ribbon));
+      state.ribbons
+        .filter(ribbon => !ribbon.finished)
+        .forEach(ribbon => appendRibbonSegment(ribbon));
+    }
+
+    function appendNewRibbon() {
+      const bounds = state.bounds;
+      let start = null;
+      let end = null;
+      let iterations = 0;
+      const thickness = 0.3;
+      while (iterations < 30 && !start) {
+        const startCandidate = {
+          x: bounds.upperLeftCorner.x + Math.random() * (bounds.lowerRightCorner.x - bounds.upperLeftCorner.x),
+          y: bounds.lowerRightCorner.y + Math.random() * (bounds.upperLeftCorner.y - bounds.lowerRightCorner.y)
+        }
+        const length = 0.5;
+        const angle = Math.random() * Math.PI * 2;
+        const endCandidate = {
+          x: startCandidate.x + length * Math.sin(angle),
+          y: startCandidate.y + length * Math.cos(angle)
+        }
+
+        if (state.ribbons.every(
+          ribbon => {
+            const minDistance = (ribbon.thickness / 2) + (thickness / 2) + 0.2
+            return ribbon.segments.every(
+              segment => segmentPointDistance(
+                startCandidate.x, startCandidate.y,
+                segment.start.x, segment.start.y, segment.end.x, segment.end.y
+              ) > minDistance &&
+                segmentPointDistance(
+                  endCandidate.x, endCandidate.y,
+                  segment.start.x, segment.start.y, segment.end.x, segment.end.y
+                ) > minDistance
+            )
+          }
+        )) {
+          start = startCandidate;
+          end = endCandidate;
+        }
+        iterations += 1;
+      }
+      if (start) {
+        const newRibbon = {
+          thickness: 0.3,
+          color: "#eee",
+          undersideColor: "#ddd",
+          finished: false,
+          segments: [{ start, end }]
+        }
+        state.ribbons.push(newRibbon);
+      }
     }
 
     function distance2d([x1, y1], [x2, y2]) {
@@ -335,19 +427,25 @@
       return Math.sqrt(dx * dx + dy * dy);
     }
 
-    const interval = setInterval(() => {
-      appendRibbonsSegments();
-      draw();
-      if (state.ribbons.every(ribbon => ribbon.segments.length >= state.maxRibbonLength)) {
-        clearInterval(interval);
-      }
-    }, 100);
-
     adjustCanvasSize();
     window.addEventListener('resize', () => adjustCanvasSize());
     window.addEventListener('resize', () => draw());
     canvas.addEventListener('click', handleCanvasClick);
+
     draw();
+    const tick = setInterval(() => {
+      if (DEBUG) {
+        console.log("TICK...", state.ribbons);
+      }
+      appendRibbonsSegments();
+      draw();
+      if (state.ribbons.length > 30) {
+        clearInterval(tick);
+      } else if (state.ribbons.every(ribbon => ribbon.finished)) {
+        // Add new ribbon
+        appendNewRibbon();
+      }
+    }, 30);
   </script>
 </body>
 
