@@ -2,13 +2,17 @@
 
 Experiments with generative drawing
 
-#### Curve
+#### Ribbons
 
-[https://pewniak747.github.io/generative/curve](https://pewniak747.github.io/generative/curve)
+[https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)
 
 #### Ellipse
 
 [https://pewniak747.github.io/generative/ellipse](https://pewniak747.github.io/generative/ellipse)
+
+#### Curve
+
+[https://pewniak747.github.io/generative/curve](https://pewniak747.github.io/generative/curve)
 
 #### Circle wave
 
