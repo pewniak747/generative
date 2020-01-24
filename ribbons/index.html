@@ -266,8 +266,9 @@
             segment.end.x, segment.end.y,
             existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y
           );
-          const minGap = 0.1
-          if (distance < ribbon.thickness + minGap) return false;
+          const minGap = 0.1;
+          const minDistance = (ribbon.thickness / 2) + (segmentRibbon.thickness / 2) + minGap;
+          if (distance < minDistance) return false;
 
           return true;
         });
