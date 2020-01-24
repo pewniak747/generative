@@ -18,7 +18,7 @@
     const ctx = canvas.getContext('2d');
     const unitLength = 100;
     const baseThickness = 0.25;
-    let DEBUG = true;
+    let DEBUG = false;
 
     const state = {
       ribbons: [],
@@ -66,8 +66,8 @@
       const gapPx = 50;
       state.bounds.upperLeftCorner.x = invertX(gapPx);
       state.bounds.upperLeftCorner.y = invertY(gapPx);
-      state.bounds.lowerRightCorner.x = invertX(canvas.width - gapPx);
-      state.bounds.lowerRightCorner.y = invertY(canvas.height - gapPx);
+      state.bounds.lowerRightCorner.x = invertX(width - gapPx);
+      state.bounds.lowerRightCorner.y = invertY(height - gapPx);
     }
 
     function handleCanvasClick(event) {
