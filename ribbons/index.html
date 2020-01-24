@@ -1,0 +1,315 @@
+<html>
+
+<head>
+  <title>ribbons</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 100;
+    let DEBUG = false;
+
+    const state = {
+      ribbons: [
+        {
+          thickness: 0.1,
+          color: "#eee",
+          undersideColor: "#ddd",
+          segments: [{
+            start: { x: 0, y: 0 },
+            end: { x: 0, y: 0.5 },
+          }]
+        }
+      ],
+      maxRibbonLength: 20
+    };
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 4) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001);
+      return value;
+    }
+    function invertY(yValue) {
+      const value = (yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001);
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+    }
+
+    function handleCanvasClick(event) {
+      appendRibbonsSegments();
+      draw();
+    }
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      drawRibbons();
+    }
+
+    function drawRibbons() {
+      state.ribbons.forEach(ribbon => {
+        ctx.save();
+        ribbon.segments.forEach((segment, segmentIdx) => {
+          if (DEBUG) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x(segment.start.x), y(segment.start.y), scale(ribbon.thickness / 2), 0, 2 * Math.PI);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          if (DEBUG) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x(segment.end.x), y(segment.end.y), scale(ribbon.thickness / 2), 0, 2 * Math.PI);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(x(segment.start.x), y(segment.start.y))
+          ctx.lineTo(x(segment.end.x), y(segment.end.y));
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+
+          function calculateLeftPoint(segment, point) {
+            const absoluteAngle = Math.atan2((segment.end.x - segment.start.x), (segment.end.y - segment.start.y));
+            return {
+              x: point.x + Math.sin(absoluteAngle - Math.PI / 2) * ribbon.thickness / 2,
+              y: point.y + Math.cos(absoluteAngle - Math.PI / 2) * ribbon.thickness / 2
+            };
+          }
+          function calculateRightPoint(segment, point) {
+            const absoluteAngle = Math.atan2((segment.end.x - segment.start.x), (segment.end.y - segment.start.y));
+            return {
+              x: point.x + Math.sin(absoluteAngle + Math.PI / 2) * ribbon.thickness / 2,
+              y: point.y + Math.cos(absoluteAngle + Math.PI / 2) * ribbon.thickness / 2
+            };
+          }
+
+          function calculateIntersectionPoints(previousSegment, nextSegment) {
+            const startLeftPoint = calculateLeftPoint(nextSegment, nextSegment.start);
+            const startRightPoint = calculateRightPoint(nextSegment, nextSegment.start);
+            const endLeftPoint = calculateLeftPoint(nextSegment, nextSegment.end);
+            const endRightPoint = calculateRightPoint(nextSegment, nextSegment.end);
+            const previousStartRightPoint = calculateRightPoint(previousSegment, previousSegment.start);
+            const previousStartLeftPoint = calculateLeftPoint(previousSegment, previousSegment.start);
+            const previousEndRightPoint = calculateRightPoint(previousSegment, previousSegment.end);
+            const previousEndLeftPoint = calculateLeftPoint(previousSegment, previousSegment.end);
+
+            const left = lineIntersectionPoint(
+              startLeftPoint.x, startLeftPoint.y, endLeftPoint.x, endLeftPoint.y,
+              previousStartRightPoint.x, previousStartRightPoint.y, previousEndRightPoint.x, previousEndRightPoint.y,
+            );
+            const right = lineIntersectionPoint(
+              startRightPoint.x, startRightPoint.y, endRightPoint.x, endRightPoint.y,
+              previousStartLeftPoint.x, previousStartLeftPoint.y, previousEndLeftPoint.x, previousEndLeftPoint.y,
+            );
+            return { left, right };
+          }
+
+          const startLeftPoint = calculateLeftPoint(segment, segment.start);
+          const startRightPoint = calculateRightPoint(segment, segment.start);
+          const endLeftPoint = calculateLeftPoint(segment, segment.end);
+          const endRightPoint = calculateRightPoint(segment, segment.end);
+
+          const previousSegment = ribbon.segments[segmentIdx - 1];
+          const nextSegment = ribbon.segments[segmentIdx + 1];
+
+          let startLeftIntersectionPoint = null;
+          if (previousSegment) {
+            const { left, right } = calculateIntersectionPoints(previousSegment, segment);
+            startLeftIntersectionPoint = left;
+            startRightIntersectionPoint = right;
+          } else {
+            startLeftIntersectionPoint = startLeftPoint;
+            startRightIntersectionPoint = startRightPoint;
+          }
+          let endLeftIntersectionPoint = null;
+          if (nextSegment) {
+            const { left, right } = calculateIntersectionPoints(segment, nextSegment);
+            endLeftIntersectionPoint = right;
+            endRightIntersectionPoint = left;
+          } else {
+            endLeftIntersectionPoint = endLeftPoint;
+            endRightIntersectionPoint = endRightPoint;
+          }
+
+          // Draw left and right points
+          if (DEBUG) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x(startLeftPoint.x), y(startLeftPoint.y), 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "blue";
+            ctx.stroke();
+            ctx.restore();
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x(startRightPoint.x), y(startRightPoint.y), 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "red";
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Connect intersection points
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(x(startLeftIntersectionPoint.x), y(startLeftIntersectionPoint.y));
+          ctx.lineTo(x(startRightIntersectionPoint.x), y(startRightIntersectionPoint.y));
+          ctx.lineTo(x(endRightIntersectionPoint.x), y(endRightIntersectionPoint.y));
+          ctx.lineTo(x(endLeftIntersectionPoint.x), y(endLeftIntersectionPoint.y));
+          ctx.closePath();
+
+          if (DEBUG) {
+            ctx.strokeStyle = "green";
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = segmentIdx % 2 == 0 ? ribbon.color : ribbon.undersideColor;
+            ctx.fill();
+          }
+          if (!DEBUG) {
+            ctx.strokeStyle = "#ccc";
+            ctx.stroke();
+          }
+          ctx.restore();
+        })
+        ctx.restore();
+      })
+    }
+
+    function appendRibbonSegment(ribbon) {
+      if (ribbon.segments.length >= state.maxRibbonLength) return;
+
+      const lastSegment = ribbon.segments[ribbon.segments.length - 1];
+      const lastAbsoluteAngle = Math.atan2((lastSegment.end.x - lastSegment.start.x), (lastSegment.end.y - lastSegment.start.y));
+
+      function isSegmentValid(segment) {
+        let valid = true;
+        ribbon.segments.forEach((existingSegment, idx) => {
+          if (idx < ribbon.segments.length - 1 && lineIntersectionPoint(
+            segment.start.x, segment.start.y, segment.end.x, segment.end.y,
+            existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y,
+          ).segmentsIntersect) { valid = false; }
+        });
+        return valid;
+      }
+
+      let newSegment = null;
+      let iterations = 0;
+      while (!newSegment && iterations < 20) {
+        // const angle = (Math.random() - 0.5) * Math.PI / 2;
+        const angle = Math.sign(Math.random() - 0.5) * ((Math.PI / 2) + (Math.random() * Math.PI / 4))
+        const length = 0.5 * (Math.random() + 1);
+        const newSegmentEndX = lastSegment.end.x + length * Math.sin(angle + lastAbsoluteAngle);
+        const newSegmentEndY = lastSegment.end.y + length * Math.cos(angle + lastAbsoluteAngle);
+        const newSegmentCandidate = {
+          start: lastSegment.end,
+          end: { x: newSegmentEndX, y: newSegmentEndY }
+        }
+
+        if (isSegmentValid(newSegmentCandidate)) {
+          newSegment = newSegmentCandidate;
+        }
+        iterations += 1;
+      }
+      if (newSegment) {
+        ribbon.segments.push(newSegment);
+      }
+    }
+
+    function appendRibbonsSegments() {
+      state.ribbons.forEach(ribbon => appendRibbonSegment(ribbon));
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    // line intercept math by Paul Bourke http://paulbourke.net/geometry/pointlineplane/
+    // Determine the intersection point of two line segments
+    // Return FALSE if the lines don't intersect
+    function lineIntersectionPoint(x1, y1, x2, y2, x3, y3, x4, y4) {
+      // Check if none of the lines are of length 0
+      if ((x1 === x2 && y1 === y2) || (x3 === x4 && y3 === y4)) {
+        return false
+      }
+      denominator = ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1))
+      // Lines are parallel
+      if (denominator === 0) {
+        return false
+      }
+      let ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denominator
+      let ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denominator
+      // is the intersection along the segments
+      /*
+      if (ua < 0 || ua > 1 || ub < 0 || ub > 1) {
+        return false
+      }
+      */
+      const segmentsIntersect = !(ua < 0 || ua > 1 || ub < 0 || ub > 1);
+      // Return a object with the x and y coordinates of the intersection
+      let x = x1 + ua * (x2 - x1);
+      let y = y1 + ua * (y2 - y1);
+      return { x, y, segmentsIntersect };
+    }
+
+    const interval = setInterval(() => {
+      appendRibbonsSegments();
+      draw();
+      if (state.ribbons.every(ribbon => ribbon.segments.length >= state.maxRibbonLength)) {
+        clearInterval(interval);
+      }
+    }, 100);
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+    draw();
+  </script>
+</body>
+
+</html>
