@@ -16,14 +16,14 @@
   <script>
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
-    const unitLength = 50;
+    const unitLength = 100;
     const baseThickness = 0.25;
     let DEBUG = true;
 
     const state = {
       ribbons: [],
       maxRibbonLength: 100,
-      maxRibbons: 50,
+      maxRibbons: 35,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
@@ -440,6 +440,7 @@
         console.log("TICK...");
       }
       appendRibbonsSegments();
+      state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
       draw();
       if (state.ribbons.length > state.maxRibbons) {
         clearInterval(tick);
@@ -449,7 +450,7 @@
         // Add new ribbon
         appendNewRibbon();
       }
-    }, 50);
+    }, 20);
   </script>
 </body>
 
