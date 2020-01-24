@@ -23,7 +23,7 @@
     const state = {
       ribbons: [],
       maxRibbonLength: 100,
-      maxRibbons: 35,
+      maxRibbons: 30,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
@@ -243,6 +243,7 @@
     }
 
     function isSegmentValid(ribbons, segmentRibbon, segment) {
+      if (!pointWithinBounds(segment.start)) return false;
       if (!pointWithinBounds(segment.end)) return false;
 
       return ribbons.every(ribbon => {
@@ -262,11 +263,16 @@
 
           // Segments must be in a certain minimum distance of each other
           // to avoid overlapping when drawn
-          const distance = segmentPointDistance(
+          const distanceStart = segmentPointDistance(
+            segment.start.x, segment.start.y,
+            existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y
+          );
+          const distanceEnd = segmentPointDistance(
             segment.end.x, segment.end.y,
             existingSegment.start.x, existingSegment.start.y, existingSegment.end.x, existingSegment.end.y
           );
-          const minGap = 0.1;
+          const distance = Math.min(distanceStart, distanceEnd);
+          const minGap = 0.25;
           const minDistance = (ribbon.thickness / 2) + (segmentRibbon.thickness / 2) + minGap;
           if (distance < minDistance) return false;
 
@@ -321,6 +327,13 @@
       let end = null;
       let iterations = 0;
       const thickness = baseThickness + (Math.random() - 0.5) * 0.3;
+      const newRibbon = {
+        thickness: thickness,
+        color: "#eee",
+        undersideColor: "#ddd",
+        finished: false,
+        segments: []
+      };
       while (iterations < 30 && !start) {
         const startCandidate = {
           x: bounds.upperLeftCorner.x + Math.random() * (bounds.lowerRightCorner.x - bounds.upperLeftCorner.x),
@@ -333,21 +346,7 @@
           y: startCandidate.y + length * Math.cos(angle)
         }
 
-        if (state.ribbons.every(
-          ribbon => {
-            const minDistance = (ribbon.thickness / 2) + (thickness / 2) + 0.2
-            return ribbon.segments.every(
-              segment => segmentPointDistance(
-                startCandidate.x, startCandidate.y,
-                segment.start.x, segment.start.y, segment.end.x, segment.end.y
-              ) > minDistance &&
-                segmentPointDistance(
-                  endCandidate.x, endCandidate.y,
-                  segment.start.x, segment.start.y, segment.end.x, segment.end.y
-                ) > minDistance
-            )
-          }
-        )) {
+        if (isSegmentValid(state.ribbons, newRibbon, { start: startCandidate, end: endCandidate })) {
           start = startCandidate;
           end = endCandidate;
         }
