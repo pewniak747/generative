@@ -17,27 +17,19 @@
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const unitLength = 100;
+    const baseThickness = 0.25;
     let DEBUG = false;
 
     const state = {
-      ribbons: [
-        {
-          thickness: 0.3,
-          color: "#eee",
-          undersideColor: "#ddd",
-          finished: false,
-          segments: [{
-            start: { x: 0, y: 0 },
-            end: { x: 0, y: 0.5 },
-          }]
-        }
-      ],
+      ribbons: [],
       maxRibbonLength: 50,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
       }
     };
+
+    appendNewRibbon();
 
     // Positioning
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -51,13 +43,13 @@
       return canvas.height / 2 - scale(value);
     }
     function invertX(xValue) {
-      const value = (xValue - canvas.width / devicePixelRatio / 4) / unitLength;
-      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001);
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
       return value;
     }
     function invertY(yValue) {
-      const value = (yValue - canvas.height / devicePixelRatio / 2) / unitLength;
-      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001);
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
       return value;
     }
 
@@ -69,6 +61,12 @@
       canvas.style.height = height + "px";
       canvas.width = width * devicePixelRatio;
       canvas.height = height * devicePixelRatio;
+
+      const gapPx = 50;
+      state.bounds.upperLeftCorner.x = invertX(gapPx);
+      state.bounds.upperLeftCorner.y = invertY(gapPx);
+      state.bounds.lowerRightCorner.x = invertX(canvas.width - gapPx);
+      state.bounds.lowerRightCorner.y = invertY(canvas.height - gapPx);
     }
 
     function handleCanvasClick(event) {
@@ -317,7 +315,7 @@
       let start = null;
       let end = null;
       let iterations = 0;
-      const thickness = 0.3;
+      const thickness = baseThickness + (Math.random() - 0.5) * 0.3;
       while (iterations < 30 && !start) {
         const startCandidate = {
           x: bounds.upperLeftCorner.x + Math.random() * (bounds.lowerRightCorner.x - bounds.upperLeftCorner.x),
@@ -352,7 +350,7 @@
       }
       if (start) {
         const newRibbon = {
-          thickness: 0.3,
+          thickness: thickness,
           color: "#eee",
           undersideColor: "#ddd",
           finished: false,
