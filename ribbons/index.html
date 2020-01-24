@@ -71,8 +71,7 @@
     }
 
     function handleCanvasClick(event) {
-      appendRibbonsSegments();
-      draw();
+      restart();
     }
 
     // Drawing
@@ -434,23 +433,27 @@
     window.addEventListener('resize', () => draw());
     canvas.addEventListener('click', handleCanvasClick);
 
-    draw();
-    const tick = setInterval(() => {
-      if (DEBUG) {
-        console.log("TICK...");
-      }
-      appendRibbonsSegments();
-      state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
+    function restart() {
+      state.ribbons = [];
       draw();
-      if (state.ribbons.length > state.maxRibbons) {
-        clearInterval(tick);
-        DEBUG = false;
+      const tick = setInterval(() => {
+        if (DEBUG) {
+          console.log("TICK...");
+        }
+        appendRibbonsSegments();
+        state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
         draw();
-      } else if (state.ribbons.every(ribbon => ribbon.finished)) {
-        // Add new ribbon
-        appendNewRibbon();
-      }
-    }, 20);
+        if (state.ribbons.length > state.maxRibbons) {
+          clearInterval(tick);
+          DEBUG = false;
+          draw();
+        } else if (state.ribbons.every(ribbon => ribbon.finished)) {
+          // Add new ribbon
+          appendNewRibbon();
+        }
+      }, 20);
+    }
+    restart();
   </script>
 </body>
 
