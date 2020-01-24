@@ -16,13 +16,14 @@
   <script>
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
-    const unitLength = 100;
+    const unitLength = 50;
     const baseThickness = 0.25;
-    let DEBUG = false;
+    let DEBUG = true;
 
     const state = {
       ribbons: [],
-      maxRibbonLength: 50,
+      maxRibbonLength: 100,
+      maxRibbons: 50,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
@@ -274,7 +275,10 @@
     }
 
     function appendRibbonSegment(ribbon) {
-      if (ribbon.segments.length >= state.maxRibbonLength) return;
+      if (ribbon.segments.length >= state.maxRibbonLength) {
+        ribbon.finished = true;
+        return;
+      };
 
       const lastSegment = ribbon.segments[ribbon.segments.length - 1];
       const lastAbsoluteAngle = Math.atan2((lastSegment.end.x - lastSegment.start.x), (lastSegment.end.y - lastSegment.start.y));
@@ -433,17 +437,19 @@
     draw();
     const tick = setInterval(() => {
       if (DEBUG) {
-        console.log("TICK...", state.ribbons);
+        console.log("TICK...");
       }
       appendRibbonsSegments();
       draw();
-      if (state.ribbons.length > 30) {
+      if (state.ribbons.length > state.maxRibbons) {
         clearInterval(tick);
+        DEBUG = false;
+        draw();
       } else if (state.ribbons.every(ribbon => ribbon.finished)) {
         // Add new ribbon
         appendNewRibbon();
       }
-    }, 30);
+    }, 50);
   </script>
 </body>
 
