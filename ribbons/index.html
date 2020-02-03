@@ -25,7 +25,8 @@
 
     const state = {
       ribbons: [],
-      maxRibbonLength: 100,
+      maxRibbonLength: 20,
+      minRibbonLength: 5,
       maxRibbons: 30,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
@@ -446,7 +447,7 @@
       draw();
       for (let i = 0; i < 2000; i += 1) {
         appendRibbonsSegments();
-        state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
+        state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= state.minRibbonLength);
         if (state.ribbons.length < state.maxRibbons && state.ribbons.every(ribbon => ribbon.finished)) {
           appendNewRibbon();
         }
