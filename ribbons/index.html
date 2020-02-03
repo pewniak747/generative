@@ -20,6 +20,9 @@
     const baseThickness = 0.25;
     let DEBUG = false;
 
+    const FOLD_OVER = "OVER";
+    const FOLD_UNDER = "UNDER";
+
     const state = {
       ribbons: [],
       maxRibbonLength: 100,
@@ -102,7 +105,9 @@
     function drawRibbons() {
       state.ribbons.forEach(ribbon => {
         ctx.save();
-        ribbon.segments.forEach((segment, segmentIdx) => {
+        const segments = ribbon.segments.slice().sort((a, b) => a.fold === FOLD_UNDER ? -1 : 1);
+        segments.forEach((segment) => {
+          const segmentIdx = ribbon.segments.indexOf(segment);
           if (DEBUG) {
             ctx.save();
             ctx.beginPath();
@@ -299,7 +304,8 @@
         const newSegmentEndY = lastSegment.end.y + length * Math.cos(angle + lastAbsoluteAngle);
         const newSegmentCandidate = {
           start: lastSegment.end,
-          end: { x: newSegmentEndX, y: newSegmentEndY }
+          end: { x: newSegmentEndX, y: newSegmentEndY },
+          fold: ribbon.segments.length % 2 == 0 ? FOLD_OVER : FOLD_UNDER
         }
 
         if (isSegmentValid(state.ribbons, ribbon, newSegmentCandidate)) {
@@ -357,7 +363,7 @@
           color: "#eee",
           undersideColor: "#ddd",
           finished: false,
-          segments: [{ start, end }]
+          segments: [{ start, end, fold: FOLD_OVER }]
         }
         state.ribbons.push(newRibbon);
       }
