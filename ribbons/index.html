@@ -78,7 +78,7 @@
     }
 
     // Drawing
-    function draw() {
+    function draw(maxDrawnRibbonSegments) {
       if (DEBUG) {
         console.log("DRAWING", state);
       }
@@ -99,13 +99,15 @@
         ctx.restore();
       }
 
-      drawRibbons();
+      drawRibbons(maxDrawnRibbonSegments);
     }
 
-    function drawRibbons() {
+    function drawRibbons(maxDrawnRibbonSegments) {
       state.ribbons.forEach(ribbon => {
         ctx.save();
-        const segments = ribbon.segments.slice().sort((a, b) => a.fold === FOLD_UNDER ? -1 : 1);
+        const segments = ribbon.segments
+          .slice(0, maxDrawnRibbonSegments)
+          .sort((a, b) => a.fold === FOLD_UNDER ? -1 : 1);
         segments.forEach((segment) => {
           const segmentIdx = ribbon.segments.indexOf(segment);
           if (DEBUG) {
@@ -437,25 +439,30 @@
     window.addEventListener('resize', () => draw());
     canvas.addEventListener('click', handleCanvasClick);
 
+    let tick;
     function restart() {
+      clearInterval(tick);
       state.ribbons = [];
       draw();
-      const tick = setInterval(() => {
+      for (let i = 0; i < 2000; i += 1) {
+        appendRibbonsSegments();
+        state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
+        if (state.ribbons.length < state.maxRibbons && state.ribbons.every(ribbon => ribbon.finished)) {
+          appendNewRibbon();
+        }
+      };
+
+      let maxDrawnRibbonSegments = 1;
+      tick = setInterval(() => {
         if (DEBUG) {
           console.log("TICK...");
         }
-        appendRibbonsSegments();
-        state.ribbons = state.ribbons.filter(ribbon => !ribbon.finished || ribbon.segments.length >= 3);
-        draw();
-        if (state.ribbons.length > state.maxRibbons) {
+        draw(maxDrawnRibbonSegments);
+        maxDrawnRibbonSegments += 1;
+        if (maxDrawnRibbonSegments > Math.max(...state.ribbons.map(ribbon => ribbon.segments.length))) {
           clearInterval(tick);
-          DEBUG = false;
-          draw();
-        } else if (state.ribbons.every(ribbon => ribbon.finished)) {
-          // Add new ribbon
-          appendNewRibbon();
         }
-      }, 20);
+      }, 30);
     }
     restart();
   </script>
