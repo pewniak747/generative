@@ -84,7 +84,7 @@
       }
       // Clear canvas
       ctx.save();
-      ctx.fillStyle = '#fff';
+      ctx.fillStyle = '#002b36';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
 
@@ -230,8 +230,8 @@
             ctx.fill();
           }
           if (!DEBUG) {
-            ctx.strokeStyle = "#ccc";
-            ctx.stroke();
+            //ctx.strokeStyle = "#ccc";
+            //ctx.stroke();
           }
           ctx.restore();
         })
@@ -334,8 +334,6 @@
       const thickness = baseThickness + (Math.random() - 0.5) * 0.3;
       const newRibbon = {
         thickness: thickness,
-        color: "#eee",
-        undersideColor: "#ddd",
         finished: false,
         segments: []
       };
@@ -360,8 +358,8 @@
       if (start) {
         const newRibbon = {
           thickness: thickness,
-          color: "#eee",
-          undersideColor: "#ddd",
+          color: "#dd3633",
+          undersideColor: "#7f0c1d",
           finished: false,
           segments: [{ start, end, fold: FOLD_OVER }]
         }
