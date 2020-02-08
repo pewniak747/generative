@@ -206,13 +206,14 @@
             const nextRightPoint = calculateRightPoint(nextSegment, nextSegment.end);
 
             const nudgeLength = clamp(0.05, 0.15, 0.02 / ribbon.thickness);
+            const foldDepth = 0.5;
             const leftStartPoint = nudge(left, previousRightPoint, nudgeLength);
             const leftEndPoint = nudge(left, nextLeftPoint, nudgeLength);
-            const leftMidPoint = interpolate(interpolate(leftStartPoint, leftEndPoint, 0.5), left, 0.5);
+            const leftMidPoint = interpolate(left, interpolate(leftStartPoint, leftEndPoint, 0.5), foldDepth);
 
             const rightStartPoint = nudge(right, previousLeftPoint, nudgeLength);
             const rightEndPoint = nudge(right, nextRightPoint, nudgeLength);
-            const rightMidPoint = interpolate(interpolate(rightStartPoint, rightEndPoint, 0.5), right, 0.5);
+            const rightMidPoint = interpolate(right, interpolate(rightStartPoint, rightEndPoint, 0.5), foldDepth);
 
             return {
               left: { start: leftStartPoint, mid: leftMidPoint, end: leftEndPoint },
@@ -308,6 +309,56 @@
           function lineTo(point) {
             ctx.lineTo(x(point.x), y(point.y));
           }
+          // http://scaledinnovation.com/analytics/splines/aboutSplines.html
+          function getControlPoints(x0, y0, x1, y1, x2, y2, t) {
+            //  x0,y0,x1,y1 are the coordinates of the end (knot) pts of this segment
+            //  x2,y2 is the next knot -- not connected here but needed to calculate p2
+            //  p1 is the control point calculated here, from x1 back toward x0.
+            //  p2 is the next control point, calculated here and returned to become the 
+            //  next segment's p1.
+            //  t is the 'tension' which controls how far the control points spread.
+
+            //  Scaling factors: distances from this knot to the previous and following knots.
+            var d01 = Math.sqrt(Math.pow(x1 - x0, 2) + Math.pow(y1 - y0, 2));
+            var d12 = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+            var fa = t * d01 / (d01 + d12);
+            var fb = t - fa;
+
+            var p1x = x1 + fa * (x0 - x2);
+            var p1y = y1 + fa * (y0 - y2);
+
+            var p2x = x1 - fb * (x0 - x2);
+            var p2y = y1 - fb * (y0 - y2);
+
+            return [p1x, p1y, p2x, p2y]
+          }
+          let debugPoints = [];
+          function mirror(point, origin) {
+            const x = origin.x - (point.x - origin.x);
+            const y = origin.y - (point.y - origin.y);
+            return { x, y };
+          }
+          function curveTo(p1, p2, p3, p4, debug = false) {
+            const t = 0.5;
+            const p1mirror = mirror(p1, p2);
+            if (distance2d([p1.x, p1.y], [p3.x, p3.y]) < distance2d([p1mirror.x, p1mirror.y], [p3.x, p3.y])) {
+              p1 = p1mirror;
+            }
+            const p4mirror = mirror(p4, p3);
+            if (distance2d([p4.x, p4.y], [p2.x, p2.y]) < distance2d([p4mirror.x, p4mirror.y], [p2.x, p2.y])) {
+              p4 = p4mirror;
+            }
+            if (debug) {
+              debugPoints.push(p1);
+              debugPoints.push(p2);
+              debugPoints.push(p3);
+              debugPoints.push(p4);
+            }
+            const [_1, _2, c1x, c1y] = getControlPoints(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, t);
+            const [_3, _4, c2x, c2y] = getControlPoints(p4.x, p4.y, p3.x, p3.y, p2.x, p2.y, t);
+            ctx.bezierCurveTo(x(c1x), y(c1y), x(c2x), y(c2y), x(p3.x), y(p3.y));
+          }
 
           // Connect points
           ctx.save();
@@ -324,17 +375,21 @@
           // Connect fold points
           moveTo(startLeftFoldPoints.mid);
           lineTo(startRightFoldPoints.mid);
-          lineTo(startRightFoldPoints.end);
+          // lineTo(startRightFoldPoints.end);
+          curveTo(startLeftFoldPoints.mid, startRightFoldPoints.mid, startRightFoldPoints.end, endRightFoldPoints.start);
           lineTo(endRightFoldPoints.start);
-          lineTo(endRightFoldPoints.mid);
+          // lineTo(endRightFoldPoints.mid);
+          curveTo(startRightFoldPoints.end, endRightFoldPoints.start, endRightFoldPoints.mid, endLeftFoldPoints.mid);
           lineTo(endLeftFoldPoints.mid);
-          lineTo(endLeftFoldPoints.start);
+          // lineTo(endLeftFoldPoints.start);
+          curveTo(endRightFoldPoints.mid, endLeftFoldPoints.mid, endLeftFoldPoints.start, startLeftFoldPoints.end);
           lineTo(startLeftFoldPoints.end);
+          curveTo(endLeftFoldPoints.start, startLeftFoldPoints.end, startLeftFoldPoints.mid, startRightFoldPoints.mid);
           ctx.closePath();
 
           if (DEBUG) {
             ctx.strokeStyle = "green";
-            if (segmentIdx === 0) {
+            if (segmentIdx === 1) {
               ctx.lineWidth = 3;
             } else {
               ctx.lineWidth = 1;
@@ -344,6 +399,19 @@
             ctx.fillStyle = segmentIdx % 2 == 0 ? ribbon.color : ribbon.undersideColor;
             ctx.fill();
           }
+
+          if (DEBUG && segmentIdx === 1) {
+            debugPoints.forEach((p, idx) => {
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(x(p.x), y(p.y), 10, 0, 2 * Math.PI);
+              ctx.closePath();
+              ctx.fillStyle = ["red", "green", "blue", "yellow"][idx];
+              ctx.fill();
+              ctx.restore();
+            })
+          }
+
           if (!DEBUG) {
             //ctx.strokeStyle = "#ccc";
             //ctx.stroke();
