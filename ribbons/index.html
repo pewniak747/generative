@@ -179,6 +179,24 @@
             return { left, right };
           }
 
+          function interpolate(start, end, amount) {
+            const x = start.x + ((end.x - start.x) * amount);
+            const y = start.y + ((end.y - start.y) * amount);
+            return { x, y };
+          }
+          function nudge(start, end, length) {
+            const distance = distance2d([start.x, start.y], [end.x, end.y]);
+            const amount = length / distance;
+            return interpolate(start, end, amount);
+          }
+          function clamp(a, b, value) {
+            const max = Math.max(a, b);
+            const min = Math.min(a, b);
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+          }
+
           function calculateFoldPoints(previousSegment, nextSegment) {
             const { left, right } = calculateIntersectionPoints(previousSegment, nextSegment);
 
@@ -187,13 +205,13 @@
             const nextLeftPoint = calculateLeftPoint(nextSegment, nextSegment.end);
             const nextRightPoint = calculateRightPoint(nextSegment, nextSegment.end);
 
-            // TODO: move by a fixed amount of space, don't interpolate
-            const leftStartPoint = interpolate(left, previousRightPoint, 0.1);
-            const leftEndPoint = interpolate(left, nextLeftPoint, 0.1);
+            const nudgeLength = clamp(0.05, 0.15, 0.02 / ribbon.thickness);
+            const leftStartPoint = nudge(left, previousRightPoint, nudgeLength);
+            const leftEndPoint = nudge(left, nextLeftPoint, nudgeLength);
             const leftMidPoint = interpolate(interpolate(leftStartPoint, leftEndPoint, 0.5), left, 0.5);
 
-            const rightStartPoint = interpolate(right, previousLeftPoint, 0.1);
-            const rightEndPoint = interpolate(right, nextRightPoint, 0.1);
+            const rightStartPoint = nudge(right, previousLeftPoint, nudgeLength);
+            const rightEndPoint = nudge(right, nextRightPoint, nudgeLength);
             const rightMidPoint = interpolate(interpolate(rightStartPoint, rightEndPoint, 0.5), right, 0.5);
 
             return {
@@ -211,11 +229,6 @@
           const previousSegment = ribbon.segments[segmentIdx - 1];
           const nextSegment = ribbon.segments[segmentIdx + 1];
 
-          function interpolate(start, end, amount) {
-            const x = start.x + ((end.x - start.x) * amount);
-            const y = start.y + ((end.y - start.y) * amount);
-            return { x, y };
-          }
           let startLeftIntersectionPoint = null;
           let startRightIntersectionPoint = null;
           let startLeftFoldPoints = null;
