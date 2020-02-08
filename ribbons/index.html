@@ -205,7 +205,10 @@
             const nextLeftPoint = calculateLeftPoint(nextSegment, nextSegment.end);
             const nextRightPoint = calculateRightPoint(nextSegment, nextSegment.end);
 
-            const nudgeLength = clamp(0.05, 0.15, 0.02 / ribbon.thickness);
+            const previousLength = distance2d([previousSegment.start.x, previousSegment.start.y], [previousSegment.end.x, previousSegment.end.y]);
+            const nextLength = distance2d([nextSegment.start.x, nextSegment.start.y], [nextSegment.end.x, nextSegment.end.y]);
+            const maxNudge = Math.min(previousLength / 4, nextLength / 4);
+            const nudgeLength = clamp(0.05, maxNudge, 0.02 / ribbon.thickness);
             const foldDepth = 0.5;
             const leftStartPoint = nudge(left, previousRightPoint, nudgeLength);
             const leftEndPoint = nudge(left, nextLeftPoint, nudgeLength);
