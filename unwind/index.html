@@ -1,0 +1,203 @@
+<html>
+  <head>
+    <title>Unwind</title>
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const unitLength = 300;
+      let mouseAngle = 0;
+      let mouseDistance = 5;
+
+      const devicePixelRatio = window.devicePixelRatio || 1;
+      function scale(value) {
+        return value * unitLength * devicePixelRatio;
+      }
+      function x(value) {
+        return canvas.width / 2 + scale(value);
+      }
+      function y(value) {
+        return canvas.height / 2 + scale(value);
+      }
+      function invertX(xValue) {
+        const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+        console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001);
+        return value;
+      }
+      function invertY(yValue) {
+        const value = (yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+        console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001);
+        return value;
+      }
+      function handleCanvasMousemove(event) {
+        const position = [invertX(event.x), invertY(event.y)];
+        const doublePI = 2 * Math.PI;
+        const angle = (Math.atan2(-position[0], position[1]) + doublePI) % doublePI;
+        const distance = Math.pow(position[0], 2) + Math.pow(position[1], 2);
+        mouseAngle = angle;
+        mouseDistance = distance;
+        draw();
+      }
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+        draw();
+      };
+
+      // Perlin noise implementation
+      function perlin({ frequency = 1, amplitude = 1 }) { // returns a function generating perlin noise <0, amplitude>
+        const pseudorandom = (() => {
+          const cache = {};
+          return (i) => {
+            i %= frequency;
+            if (!cache[i]) cache[i] = Math.random();
+            return cache[i];
+          }
+        })();
+
+        function fade(t) {
+          return t * t * t * (t * (t * 6 - 15) + 10);  // 6t^5 - 15t^4 + 10t^3
+        }
+
+        function noise(i) {
+          i *= frequency;
+          const boundDown = Math.floor(i);
+          const boundUp = Math.ceil(i);
+
+          if (boundDown === boundUp) {
+            return pseudorandom(boundDown);
+          }
+          const dot1 = fade(1 - Math.abs(i - boundDown)) * pseudorandom(boundDown);
+          const dot2 = fade(1 - Math.abs(i - boundUp)) * pseudorandom(boundUp);
+          return (dot1 + dot2);
+        }
+
+        const cache = {};
+        function result (i) {
+          if (!cache[i]) cache[i] = noise(i);
+          return cache[i] * amplitude;
+        }
+
+        result.frequency = frequency;
+        result.amplitude = amplitude;
+        return result;
+      }
+
+      // Returns a function returning periodic noise <0, 1>
+      function sine({ frequency = 1, amplitude = 1, phase = 0 }) {
+        function result(i) {
+          return (1 + Math.sin(i * frequency * 2 * Math.PI + phase)) / 2 * amplitude;
+        }
+
+        result.amplitude = amplitude;
+        return result;
+      }
+
+      function multiply(noise1, noise2) {
+        function result (i) {
+          return noise1(i) * noise2(i);
+        }
+        result.amplitude = noise1.amplitude * noise2.amplitude;
+        return result;
+      }
+
+      // Angle in radians <0, 2PI>
+      // Returns number <-1, 1>
+      const petals = sine({ frequency: 3, amplitude: 0.05, phase: Math.PI / 2 });
+      const noises1 = [
+        multiply(sine({ frequency: 3, amplitude: 0.1, phase: 0 }), perlin({ frequency: 20, amplitude: 0.5 }))
+      ];
+      const noises2 = [
+        multiply(sine({ frequency: 3, amplitude: 0.1, phase: Math.PI / 2 }), perlin({ frequency: 10, amplitude: 0.5 }))
+      ];
+      const noises3 = [
+        multiply(sine({ frequency: 3, amplitude: 0.1, phase: Math.PI }), perlin({ frequency: 5, amplitude: 0.5 }))
+      ];
+      function noiseAt(noises, angle, cutoff = noises.length) {
+        let result = 0;
+        noises.forEach((noise, idx) => {
+          if (idx < cutoff) {
+            result += (noise(angle / (2*Math.PI)) - noise.amplitude / 2) * 2;
+          }
+        })
+        return result;
+      }
+
+      // Draw the shape with outline
+      function drawShape({ amplitude = 1, fillStyle = '#000', strokeStyle = '#000', noises }) {
+        const splits = 1000;
+        const unitRadius = unitLength;
+        for (let i = 0; i < splits; i++) {
+          const angle = i / splits * 2 * Math.PI;
+          const noiseAmount = noiseAt(noises, angle);
+          const windowWidth = Math.PI;
+          const mouseAmplitude = mouseDistance;
+          const doublePI = Math.PI * 2;
+          const angleDifference = Math.min(
+            Math.abs(angle - mouseAngle),
+            doublePI - Math.abs(angle - mouseAngle)
+          );
+          const noiseImportance10 = 1 - (angleDifference / windowWidth);
+          const noiseImportanceSmooth = Math.pow(Math.sin(noiseImportance10 * Math.PI / 2), 20);
+          const noiseImportance = angleDifference < windowWidth ? noiseImportanceSmooth : 0;
+          const radius = (1 + noiseAmount * noiseImportance * mouseAmplitude) * unitRadius * amplitude;
+          if(i === 0) {
+            ctx.beginPath();
+            ctx.moveTo(0, radius);
+          }
+          ctx.save();
+          ctx.rotate(angle);
+          ctx.lineTo(0, radius);
+          ctx.restore();
+        }
+        ctx.closePath();
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = strokeStyle;
+        ctx.fillStyle = fillStyle;
+        ctx.globalAlpha = 0.75;
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear scene
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // Normalize 0,0 point to the middle of canvas
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // Draw shapes
+        drawShape({ amplitude: 1.0, fillStyle: '#fff', strokeStyle: '#666', noises: noises1});
+        drawShape({ amplitude: 1.0, fillStyle: '#eee', strokeStyle: '#666', noises: noises2});
+        drawShape({ amplitude: 1.0, fillStyle: '#ddd', strokeStyle: '#666', noises: noises3});
+
+        ctx.restore();
+      };
+
+      adjustCanvasSize();
+      draw();
+      window.addEventListener('resize', adjustCanvasSize);
+      // window.addEventListener('mousemove', handleCanvasMousemove);
+      window.addEventListener('click', handleCanvasMousemove);
+    </script>
+  </body>
+</html>

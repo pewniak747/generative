@@ -102,11 +102,17 @@
         }
         console.log("FIRST REF IN ANGLE", getFirstRefractionInAngle());
         console.log("FIRST REF OUT ANGLE", getFirstRefractionOutAngle());
+        console.log("SECOND REF IN ANGLE", getSecondRefractionInAngle());
+        console.log("SECOND REF OUT ANGLE", getSecondRefractionOutAngle());
       }
 
       // Refraction calculation
-      const prismRefractiveIndex = 1.52;
+      const prismRefractiveIndex = 1.5;
       const airRefractiveIndex = 1.0;
+      function getRayRefractiveIndex(ray) {
+        const delta = state.rays.indexOf(ray) - Math.ceil(state.rays.length / 2);
+        return prismRefractiveIndex + delta * 0.1;
+      }
 
       function getPrismVertices() {
         const prismHeight = state.prismEdge * Math.sqrt(3) / 2;
@@ -157,10 +163,26 @@
         return angle - Math.PI / 2;
       }
 
-      function getFirstRefractionOutAngle() {
+      function getSecondRefractionInAngle(ray) {
+        const P1 = getSecondRefractionPoint(ray);
+        const P2 = getPrismVertices()[2]; // TODO: choose refraction wall
+        const P3 = getFirstRefractionPoint();
+        const angle = (Math.atan2(P3[1] - P1[1], P3[0] - P1[0]) -
+                       Math.atan2(P2[1] - P1[1], P2[0] - P1[0]) +
+                       2 * Math.PI) % (2 * Math.PI);
+        return angle - Math.PI / 2;
+      }
+
+      function getFirstRefractionOutAngle(ray) {
         const inAngle = getFirstRefractionInAngle();
 
-        return Math.asin(airRefractiveIndex / prismRefractiveIndex * Math.sin(inAngle));
+        return Math.asin(airRefractiveIndex / getRayRefractiveIndex(ray) * Math.sin(inAngle));
+      }
+
+      function getSecondRefractionOutAngle(ray) {
+        const inAngle = getSecondRefractionInAngle(ray);
+
+        return Math.asin(getRayRefractiveIndex(ray) / airRefractiveIndex * Math.sin(inAngle));
       }
 
       // https://academo.org/demos/rotation-about-point
@@ -171,14 +193,14 @@
         ];
       }
 
-      function getSecondRefractionPoint() {
-        const angle = getFirstRefractionOutAngle();
+      function getSecondRefractionPoint(ray) {
+        const angle = getFirstRefractionOutAngle(ray);
         const rayStart = getFirstRefractionPoint();
         const rayEnd = rotate(getPrismVertices()[0], rayStart, angle - Math.PI / 2);
-        const ray = [rayStart, rayEnd];
+        const segment = [rayStart, rayEnd];
         let point = null;
         getPrismRayOutWalls().forEach(wall => {
-          point = point || intersectionWithPrismWall(ray, wall);
+          point = point || intersectionWithPrismWall(segment, wall);
         });
         return point || [1, 1];
       }
@@ -269,26 +291,28 @@
         ctx.stroke();
         ctx.restore();
 
-        const secondRefractionPoint = getSecondRefractionPoint();
-        ctx.save();
-        if(DEBUG) {
-          ctx.strokeStyle = "#000";
-        } else {
-          ctx.strokeStyle = "yellow";
-        }
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]));
-        ctx.lineTo(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]));
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
+        state.rays.forEach(ray => {
+          const secondRefractionPoint = getSecondRefractionPoint(ray);
+          ctx.save();
+          if(DEBUG) {
+            ctx.strokeStyle = "#000";
+          } else {
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = ray.color;
+          }
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x(firstRefractionPoint[0]), y(firstRefractionPoint[1]));
+          ctx.lineTo(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]));
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        })
       }
 
-      function drawRays() {
+      function drawOutRays() {
         const raysOrigin = getSecondRefractionPoint();
-        const rayOrigin = state.rayOrigin;
-        const rayAngle = getFirstRefractionOutAngle(); // TODO Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
+        const rayAngle = getSecondRefractionOutAngle() - Math.PI / 6; // TODO Math.atan2((rayOrigin[1] - raysOrigin[1]), (raysOrigin[0] - rayOrigin[0]));
         const raysAngle = rayAngle / 1; // TODO
 
         const steps = 500;
@@ -318,23 +342,6 @@
           const rayPoints = calculateRayPoints(ray, raysAngle + -1 * ((state.rays.length + 1) / 2 - idx) * dispersion);
           return [ray, rayPoints];
         });
-
-        // Draw rays in segments, like a paintbrush
-
-        ctx.save();
-        // console.log("RAY ORIGIN", raysOrigin);
-        ctx.translate(x(raysOrigin[0]), y(raysOrigin[1]));
-        ctx.rotate(raysAngle) // Rotate based on "main" axis
-        // ctx.translate(-x(raysOrigin[0]), -y(raysOrigin[1]));
-
-        // ctx.arc(x(0), y(0), 5, 0, 2* Math.PI)
-        // ctx.stroke();
-        // ctx.arc(0, 0, 10, 0, 2* Math.PI)
-        // ctx.stroke();
-        // ctx.restore();
-        // return;
-
-        const pointsCount = raysWithPoints[0][1].length;
 
         const rayOrder = raysWithPoints
           .map((r, rayIdx) => [...r, rayIdx])
@@ -371,16 +378,33 @@
           return distance2d([point1.x, point1.y], [point2.x, point2.y]) > minDistance;
         }
 
+
+        // Draw rays in segments, like a paintbrush
+
+        ctx.save();
+        // console.log("RAY ORIGIN", raysOrigin);
+        // ctx.translate(-x(raysOrigin[0]), -y(raysOrigin[1]));
+
+        // ctx.arc(x(0), y(0), 5, 0, 2* Math.PI)
+        // ctx.stroke();
+        // ctx.arc(0, 0, 10, 0, 2* Math.PI)
+        // ctx.stroke();
+        // ctx.restore();
+        // return;
+
         function brushSegment(rayIdx, segment) {
           const ray = raysWithPoints[rayIdx][0];
           const allPoints = raysWithPoints[rayIdx][1];
           // console.log("DRAWING RAY SEGMENT", ray.color, segment);
+          const rayOrigin = getSecondRefractionPoint(ray);
           const points = allPoints.slice(segment.start, segment.end + 1);
           points.forEach((point, step) => {
             const nextPoint = points[step + 1];
             if (!nextPoint) return;
 
             ctx.save();
+            ctx.translate(x(raysOrigin[0]), y(raysOrigin[1]));
+            ctx.rotate(raysAngle) // Rotate based on "main" axis
             ctx.beginPath();
             ctx.moveTo(scale(point.x), scale(point.y));
             if (!DEBUG) {
@@ -391,6 +415,10 @@
             ctx.lineTo(scale(nextPoint.x), scale(nextPoint.y));
             ctx.lineCap = "round";
             ctx.strokeStyle = ray.color;
+            if (!DEBUG) {
+              ctx.globalAlpha = 0.1;
+              // ctx.filter = "blur(2px)";
+            }
             ctx.stroke();
             ctx.restore();
           });
@@ -440,15 +468,17 @@
         ctx.restore();
 
         // Draw second refraction point
-        const secondRefractionPoint = getSecondRefractionPoint();
-        ctx.save();
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]), 3, 0, 2 * Math.PI);
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
+        state.rays.forEach(ray => {
+          const secondRefractionPoint = getSecondRefractionPoint(ray);
+          ctx.save();
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x(secondRefractionPoint[0]), y(secondRefractionPoint[1]), 3, 0, 2 * Math.PI);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        });
       }
 
       function draw() {
@@ -471,7 +501,7 @@
           drawRayDebugPoints();
         }
         drawRay();
-        drawRays();
+        drawOutRays();
       }
 
       function distance2d([x1, y1], [x2, y2]) {

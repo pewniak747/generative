@@ -1,0 +1,109 @@
+<html>
+  <head>
+    <title>Mosaic</title>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const unitLength = 300;
+      let DEBUG = true;
+
+      const tiles = [];
+      const tilesCount = 1000;
+      const tilesAreaRadius = 2;
+      const tileRadius = 0.04;
+
+      for(let i = 0; i < tilesCount; i++) {
+        let retries = 0;
+        while (true) {
+          // const r = gaussianRand() * tilesAreaRadius;
+          const r = Math.random() * tilesAreaRadius;
+          const arc = Math.random() * 2 * Math.PI;
+          const x = r * Math.cos(arc);
+          const y = r * Math.sin(arc);
+          const tile = { x, y, arc };
+          const overlappingTiles = tiles.filter((t) => tilesOverlap(tile, t, 0.005));
+          const closeTiles = tiles.filter((t) => !tilesOverlap(tile, t, 0) && tilesOverlap(tile, t, 0.05));
+          if(overlappingTiles.length === 0 && (retries > 100 || closeTiles.length > 1)) {
+            tiles.push(tile);
+            console.log(tiles.length, r);
+            break;
+          } else {
+            retries += 1;
+          }
+        }
+      }
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      }
+
+      function gaussianRand() {
+        let rand = 0;
+        for (let i = 0; i < 6; i += 1) {
+          rand += Math.random();
+        }
+        return Math.abs(rand / 6 - 0.5) * 5;
+      }
+
+      function tilesOverlap(tile1, tile2, minPadding) {
+        return distance2d([tile1.x, tile1.y], [tile2.x, tile2.y]) < tileRadius * 2 + minPadding;
+      }
+
+      function drawTile({ x, y, arc }, index) {
+        ctx.save();
+        ctx.beginPath();
+        // ctx.arc(x * unitLength, y * unitLength, tileRadius * unitLength, 0, 2 * Math.PI);
+        ctx.translate(x * unitLength, y * unitLength);
+        ctx.rotate(arc);
+        // ctx.arc(0, 0, tileRadius * unitLength, 1.5 * Math.PI, 2.5 * Math.PI);
+        const diag = Math.sqrt(2) / 2;
+        ctx.rect(-tileRadius * diag * unitLength, -tileRadius * diag * unitLength, 2 * tileRadius * diag * unitLength, 2 * tileRadius * diag * unitLength);
+        ctx.strokeStyle = '#777';
+        ctx.fillStyle = '#eee';
+        if (index > tilesCount / 1.75) ctx.globalAlpha = 0.5;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear canvas
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // Move coordinates origin to canvas center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        tiles.forEach(drawTile);
+        ctx.restore();
+      }
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('resize', draw);
+      draw();
+    </script>
+  </body>
+</html>

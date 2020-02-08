@@ -1,0 +1,161 @@
+<html>
+  <head>
+    <title>Seeds</title>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <canvas>
+    </canvas>
+    <style>
+      body {
+        margin: 0;
+      }
+    </style>
+    <script>
+      const canvas = document.querySelector('canvas');
+      const ctx = canvas.getContext('2d');
+      const unitLength = 300;
+      let DEBUG = true;
+
+      const centers = [];
+      const centersCount = 40;
+      for(let i = 0; i < centersCount; i++) {
+        const r = Math.random();
+        const a = Math.random() * 2 * Math.PI;
+        const x = r * Math.cos(a);
+        const y = r * Math.sin(a);
+        const force = [0, 0];
+        centers.push({ x, y, force });
+      }
+
+      function adjustCanvasSize() {
+        const width = document.body.clientWidth;
+        const height = document.body.clientHeight;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.style.width = width + "px";
+        canvas.style.height = height + "px";
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+      }
+
+      function drawGlobalBoundary() {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(0, 0, unitLength, 0, 2 * Math.PI);
+        ctx.closePath();
+        if (DEBUG) {
+          ctx.stroke();
+        } else {
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawForce(center) {
+        const { x, y, force: [forceX, forceY] } = center;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(x * unitLength, y * unitLength);
+        ctx.lineTo((x + forceX) * unitLength, (y + forceY) * unitLength);
+        ctx.closePath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'red';
+        if (DEBUG) {
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawCenterBoundary(center) {
+        const { x, y } = center;
+        let minDistance = Infinity;
+        centers.forEach((otherCenter) => {
+          if (center === otherCenter) return;
+          const distance = distance2d([center.x, center.y], [otherCenter.x, otherCenter.y]);
+          if (distance < minDistance) minDistance = distance;
+        });
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x * unitLength, y * unitLength, minDistance * unitLength * 0.45, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.strokeStyle = 'blue';
+        ctx.fillStyle = 'white';
+        if (DEBUG) {
+          ctx.stroke();
+        } else {
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function drawCenter(center) {
+        const { x, y } = center;
+        drawForce(center);
+        drawCenterBoundary(center);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x * unitLength, y * unitLength, 5, 0, 2 * Math.PI);
+        ctx.closePath();
+        if (DEBUG) {
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function draw() {
+        // Clear canvas
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+
+        ctx.save();
+        // Move coordinates origin to canvas center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        drawGlobalBoundary();
+        centers.forEach(drawCenter);
+        ctx.restore();
+      }
+
+      function tick() {
+        const rate = 0.01;
+        centers.forEach((center) => {
+          for (let i = 1; i <= 100; i++) {
+            const newX = center.x + center.force[0] * rate / i;
+            const newY = center.y + center.force[1] * rate / i;
+            const newDistance = distance2d([newX, newY], [0, 0]);
+            if (newDistance < 1) {
+              center.x = newX;
+              center.y = newY;
+              break;
+            }
+          }
+          const distance = distance2d([center.x, center.y], [0, 0]);
+          const centerForce = [-center.x / 2 * distance, -center.y / 2 * distance];
+          // const centerForce = [0, 0];
+          const force = centerForce;
+          centers.forEach((otherCenter) => {
+            if (otherCenter === center) return;
+            if (distance2d([center.x, center.y], [otherCenter.x, otherCenter.y]) > 0.5) return;
+            const forceX = 0.05 / (center.x - otherCenter.x);
+            const forceY = 0.05 / (center.y - otherCenter.y);
+            force[0] += forceX;
+            force[1] += forceY;
+          });
+          center.force = force;
+        });
+        draw();
+      }
+
+      function distance2d([x1, y1], [x2, y2]) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+      }
+
+      adjustCanvasSize();
+      window.addEventListener('resize', adjustCanvasSize);
+      window.addEventListener('resize', draw);
+      setInterval(tick, 100);
+      draw();
+    </script>
+  </body>
+</html>
