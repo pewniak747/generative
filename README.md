@@ -1,31 +1,31 @@
-# Generative
+# generative
 
-Experiments with generative drawing
+Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
 
-#### Ribbons
+#### ribbons
 
 [https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)
 
-#### Ellipse
+#### ellipse
 
 [https://pewniak747.github.io/generative/ellipse](https://pewniak747.github.io/generative/ellipse)
 
-#### Curve
+#### curve
 
 [https://pewniak747.github.io/generative/curve](https://pewniak747.github.io/generative/curve)
 
-#### Circle wave
+#### circle wave
 
 [https://pewniak747.github.io/generative/circle-wave](https://pewniak747.github.io/generative/circle-wave)
 
-#### Particles
+#### particles
 
 [https://pewniak747.github.io/generative/particles](https://pewniak747.github.io/generative/particles)
 
-#### Particles 2
+#### particles 2
 
 [https://pewniak747.github.io/generative/particles-2](https://pewniak747.github.io/generative/particles-2)
 
-#### Squares
+#### squares
 
 [https://pewniak747.github.io/generative/squares](https://pewniak747.github.io/generative/squares)
