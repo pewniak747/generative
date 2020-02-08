@@ -85,7 +85,11 @@
       }
       // Clear canvas
       ctx.save();
-      ctx.fillStyle = '#002b36';
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = '#002b36';
+      }
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
 
@@ -129,13 +133,15 @@
             ctx.restore();
           }
 
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(x(segment.start.x), y(segment.start.y))
-          ctx.lineTo(x(segment.end.x), y(segment.end.y));
-          ctx.closePath();
-          ctx.stroke();
-          ctx.restore();
+          if (DEBUG) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x(segment.start.x), y(segment.start.y))
+            ctx.lineTo(x(segment.end.x), y(segment.end.y));
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
 
           function calculateLeftPoint(segment, point) {
             const absoluteAngle = Math.atan2((segment.end.x - segment.start.x), (segment.end.y - segment.start.y));
@@ -173,36 +179,83 @@
             return { left, right };
           }
 
+          function calculateFoldPoints(previousSegment, nextSegment) {
+            const { left, right } = calculateIntersectionPoints(previousSegment, nextSegment);
+
+            const previousLeftPoint = calculateLeftPoint(previousSegment, previousSegment.start);
+            const previousRightPoint = calculateRightPoint(previousSegment, previousSegment.start);
+            const nextLeftPoint = calculateLeftPoint(nextSegment, nextSegment.end);
+            const nextRightPoint = calculateRightPoint(nextSegment, nextSegment.end);
+
+            // TODO: move by a fixed amount of space, don't interpolate
+            const leftStartPoint = interpolate(left, previousRightPoint, 0.1);
+            const leftEndPoint = interpolate(left, nextLeftPoint, 0.1);
+            const leftMidPoint = interpolate(interpolate(leftStartPoint, leftEndPoint, 0.5), left, 0.5);
+
+            const rightStartPoint = interpolate(right, previousLeftPoint, 0.1);
+            const rightEndPoint = interpolate(right, nextRightPoint, 0.1);
+            const rightMidPoint = interpolate(interpolate(rightStartPoint, rightEndPoint, 0.5), right, 0.5);
+
+            return {
+              left: { start: leftStartPoint, mid: leftMidPoint, end: leftEndPoint },
+              right: { start: rightStartPoint, mid: rightMidPoint, end: rightEndPoint },
+            };
+          }
+
           const startLeftPoint = calculateLeftPoint(segment, segment.start);
           const startRightPoint = calculateRightPoint(segment, segment.start);
           const endLeftPoint = calculateLeftPoint(segment, segment.end);
           const endRightPoint = calculateRightPoint(segment, segment.end);
 
+
           const previousSegment = ribbon.segments[segmentIdx - 1];
           const nextSegment = ribbon.segments[segmentIdx + 1];
 
+          function interpolate(start, end, amount) {
+            const x = start.x + ((end.x - start.x) * amount);
+            const y = start.y + ((end.y - start.y) * amount);
+            return { x, y };
+          }
           let startLeftIntersectionPoint = null;
+          let startRightIntersectionPoint = null;
+          let startLeftFoldPoints = null;
+          let startRightFoldPoints = null;
+
           if (previousSegment) {
             const { left, right } = calculateIntersectionPoints(previousSegment, segment);
             startLeftIntersectionPoint = left;
             startRightIntersectionPoint = right;
+            const { left: leftFold, right: rightFold } = calculateFoldPoints(previousSegment, segment);
+            startLeftFoldPoints = leftFold;
+            startRightFoldPoints = rightFold;
           } else {
             startLeftIntersectionPoint = startLeftPoint;
             startRightIntersectionPoint = startRightPoint;
+            startLeftFoldPoints = { start: startLeftPoint, mid: startLeftPoint, end: startLeftPoint };
+            startRightFoldPoints = { start: startRightPoint, mid: startRightPoint, end: startRightPoint };
           }
           let endLeftIntersectionPoint = null;
+          let endRightIntersectionPoint = null;
+          endLeftFoldPoints = null;
+          endRightFoldPoints = null;
           if (nextSegment) {
             const { left, right } = calculateIntersectionPoints(segment, nextSegment);
             endLeftIntersectionPoint = right;
             endRightIntersectionPoint = left;
+            const { left: leftFold, right: rightFold } = calculateFoldPoints(segment, nextSegment);
+            endLeftFoldPoints = rightFold;
+            endRightFoldPoints = leftFold;
           } else {
             endLeftIntersectionPoint = endLeftPoint;
             endRightIntersectionPoint = endRightPoint;
+            endLeftFoldPoints = { start: endLeftPoint, mid: endLeftPoint, end: endLeftPoint };
+            endRightFoldPoints = { start: endRightPoint, mid: endRightPoint, end: endRightPoint };
           }
 
           // Draw left and right points
           if (DEBUG) {
             ctx.save();
+            /*
             ctx.beginPath();
             ctx.arc(x(startLeftPoint.x), y(startLeftPoint.y), 3, 0, 2 * Math.PI);
             ctx.strokeStyle = "blue";
@@ -213,20 +266,66 @@
             ctx.arc(x(startRightPoint.x), y(startRightPoint.y), 3, 0, 2 * Math.PI);
             ctx.strokeStyle = "red";
             ctx.stroke();
+            */
+
+            ctx.save();
+            ctx.beginPath();
+            if (startLeftFoldPoints.start) ctx.arc(x(startLeftFoldPoints.start.x), y(startLeftFoldPoints.start.y), 3, 0, 2 * Math.PI);
+            ctx.arc(x(startLeftFoldPoints.mid.x), y(startLeftFoldPoints.mid.y), 3, 0, 2 * Math.PI);
+            ctx.arc(x(startLeftFoldPoints.end.x), y(startLeftFoldPoints.end.y), 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "blue";
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            if (startRightFoldPoints.start) ctx.arc(x(startRightFoldPoints.start.x), y(startRightFoldPoints.start.y), 3, 0, 2 * Math.PI);
+            ctx.arc(x(startRightFoldPoints.mid.x), y(startRightFoldPoints.mid.y), 3, 0, 2 * Math.PI);
+            ctx.arc(x(startRightFoldPoints.end.x), y(startRightFoldPoints.end.y), 3, 0, 2 * Math.PI);
+            ctx.strokeStyle = "red";
+            ctx.stroke();
+            ctx.restore();
+
             ctx.restore();
           }
 
-          // Connect intersection points
+          function moveTo(point) {
+            ctx.moveTo(x(point.x), y(point.y));
+          }
+          function lineTo(point) {
+            ctx.lineTo(x(point.x), y(point.y));
+          }
+
+          // Connect points
           ctx.save();
           ctx.beginPath();
-          ctx.moveTo(x(startLeftIntersectionPoint.x), y(startLeftIntersectionPoint.y));
-          ctx.lineTo(x(startRightIntersectionPoint.x), y(startRightIntersectionPoint.y));
-          ctx.lineTo(x(endRightIntersectionPoint.x), y(endRightIntersectionPoint.y));
-          ctx.lineTo(x(endLeftIntersectionPoint.x), y(endLeftIntersectionPoint.y));
+
+          /*
+          // Old: connect intersection points
+          moveTo(startLeftIntersectionPoint);
+          lineTo(startRightIntersectionPoint);
+          lineTo(endRightIntersectionPoint);
+          lineTo(endLeftIntersectionPoint);
+          */
+
+          // Connect fold points
+          moveTo(startLeftFoldPoints.mid);
+          lineTo(startRightFoldPoints.mid);
+          lineTo(startRightFoldPoints.end);
+          lineTo(endRightFoldPoints.start);
+          lineTo(endRightFoldPoints.mid);
+          lineTo(endLeftFoldPoints.mid);
+          lineTo(endLeftFoldPoints.start);
+          lineTo(startLeftFoldPoints.end);
           ctx.closePath();
 
           if (DEBUG) {
             ctx.strokeStyle = "green";
+            if (segmentIdx === 0) {
+              ctx.lineWidth = 3;
+            } else {
+              ctx.lineWidth = 1;
+            }
             ctx.stroke();
           } else {
             ctx.fillStyle = segmentIdx % 2 == 0 ? ribbon.color : ribbon.undersideColor;
