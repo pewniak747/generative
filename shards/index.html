@@ -1,0 +1,223 @@
+<html>
+
+<head>
+  <title>Shards</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <script>
+    // TODO:
+    // [x] Draw basic shards
+    // [ ] Rotate shards in 3D
+    // [ ] Rotation based on noise
+    // [ ] Color based on rotation (lighting)
+    // [ ] Drop shadows
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 200;
+    let DEBUG = false;
+
+    const state = {
+      shards: [],
+      maxShards: 20,
+      bounds: {
+        upperLeftCorner: { x: -5, y: 5 },
+        lowerRightCorner: { x: 5, y: -5 }
+      }
+    };
+
+    appendNewShard();
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
+      return value;
+    }
+    function invertY(yValue) {
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+
+      const gapPx = 50;
+      state.bounds.upperLeftCorner.x = invertX(gapPx);
+      state.bounds.upperLeftCorner.y = invertY(gapPx);
+      state.bounds.lowerRightCorner.x = invertX(width - gapPx);
+      state.bounds.lowerRightCorner.y = invertY(height - gapPx);
+    }
+    function handleCanvasClick(event) {
+      restart();
+    }
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = '#343434';
+      }
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      if (DEBUG) {
+        ctx.save();
+        ctx.moveTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.lineTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawShards();
+    }
+
+    function drawShards() {
+      state.shards.forEach(shard => {
+        ctx.save();
+        function moveTo(point) {
+          ctx.moveTo(x(point.x), y(point.y));
+        }
+        function lineTo(point) {
+          ctx.lineTo(x(point.x), y(point.y));
+        }
+        function rotateOrigin(point, angle) {
+          const c = Math.cos(angle);
+          const s = Math.sin(angle)
+          const x = point.x * c - point.y * s;
+          const y = point.x * s + point.y * c;
+          return { x, y }
+        }
+        function translate(point, vector) {
+          return { x: point.x + vector.x, y: point.y + vector.y }
+        }
+        if (DEBUG) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(x(shard.center.x), y(shard.center.y), scale(shard.boundingCircleRadius), 0, 2 * Math.PI)
+          ctx.closePath()
+          ctx.stroke()
+          ctx.restore()
+        }
+        const r = shard.boundingCircleRadius
+        const a = translate(rotateOrigin({ x: 0, y: r }, shard.angle), shard.center)
+        const b = translate(rotateOrigin({ x: r * Math.cos(Math.PI / 6), y: -r * Math.sin(Math.PI / 6) }, shard.angle), shard.center)
+        const c = translate(rotateOrigin({ x: -r * Math.cos(Math.PI / 6), y: -r * Math.sin(Math.PI / 6) }, shard.angle), shard.center)
+        ctx.save()
+        ctx.beginPath()
+        moveTo(a);
+        lineTo(b);
+        lineTo(c);
+        lineTo(a)
+        ctx.closePath();
+        if (DEBUG) {
+          ctx.stroke()
+        } else {
+          ctx.fillStyle = "#e6b31e"
+          ctx.fill()
+        }
+        ctx.restore()
+        ctx.restore();
+      })
+    }
+
+    function pointWithinBounds(point) {
+      return state.bounds.upperLeftCorner.x <= point.x &&
+        point.x <= state.bounds.lowerRightCorner.x &&
+        state.bounds.lowerRightCorner.y <= point.y &&
+        point.y <= state.bounds.upperLeftCorner.y;
+    }
+
+    function appendNewShard() {
+      const bounds = state.bounds;
+      const boundingCircleRadius = 0.3 + (Math.random() - 0.5) * 0.1;
+      const angle = Math.random() * Math.PI * 2;
+      let centerCandidate = { x: 0, y: 0 };
+      let ok = false;
+      let iterations = 0;
+      while (iterations < 30) {
+        centerCandidate = {
+          x: bounds.upperLeftCorner.x + Math.random() * (bounds.lowerRightCorner.x - bounds.upperLeftCorner.x),
+          y: bounds.lowerRightCorner.y + Math.random() * (bounds.upperLeftCorner.y - bounds.lowerRightCorner.y)
+        }
+        if (isShardValid(centerCandidate, boundingCircleRadius)) {
+          ok = true;
+          break;
+        } else {
+          iterations += 1;
+        }
+      }
+      if (ok) {
+        const newShard = {
+          center: centerCandidate,
+          boundingCircleRadius,
+          angle,
+        }
+        state.shards.push(newShard);
+      }
+    }
+
+    function isShardValid(center, radius) {
+      const gap = 0.05
+      return state.shards.every(shard =>
+        distance2d([shard.center.x, shard.center.y], [center.x, center.y]) > shard.boundingCircleRadius + radius + gap
+      )
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+
+    function restart() {
+      state.shards = [];
+      for (let i = 0; i < 2000; i += 1) {
+        if (state.shards.length < state.maxShards) {
+          appendNewShard();
+        }
+      };
+      draw();
+    }
+    restart();
+  </script>
+</body>
+
+</html>
