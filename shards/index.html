@@ -28,8 +28,8 @@
 
     const state = {
       shards: [],
-      maxShards: 5000,
-      lightHeading: { phi: - 3 / 4 * Math.PI, theta: Math.PI / 4 },
+      maxShards: 1000,
+      lightHeading: { phi: 3 / 4 * Math.PI, theta: Math.PI / 3 },
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
@@ -117,10 +117,11 @@
         ctx.restore();
       }
 
-      drawShards();
+      drawShards("SHADOWS");
+      drawShards("SHARDS");
     }
 
-    function drawShards() {
+    function drawShards(pass) {
       state.shards.forEach(shard => {
         ctx.save();
         function moveTo(point) {
@@ -140,15 +141,14 @@
           return { ...radialPoint, phi: radialPoint.phi + angle }
         }
         function rotateHeading(radialPoint, heading) {
-          const phi = radialPoint.phi + heading.phi;
           const theta = radialPoint.theta + heading.theta;
-          const rotatedRadialPoint = rotatePhi(radialPoint, heading.phi);
+          const rotatedRadialPoint = rotatePhi(radialPoint, -1 * heading.phi);
           const { x, y, z } = radialPointToPoint(rotatedRadialPoint);
           const { x: xPrime, y: zPrime } = rotateOrigin({ x, y: z }, heading.theta);
           const result = pointToRadialPoint({ x: xPrime, y, z: zPrime })
           // console.log("SANITY CHECK", radialPoint, pointToRadialPoint(radialPointToPoint(radialPoint)))
           // console.log("ROTATING", JSON.stringify({ radialPoint, heading, result }, null, 2));
-          return { ...result, phi: result.phi - heading.phi }
+          return { ...result, phi: result.phi + heading.phi }
         }
         function radialPointToPoint(radialPoint) {
           const { r, phi, theta } = radialPoint
@@ -172,7 +172,7 @@
           return Math.acos(Math.cos(theta1) * Math.cos(theta2) + Math.sin(theta1) * Math.sin(theta2) * Math.cos(phi1 - phi2))
         }
         function translate(point, vector) {
-          return { x: point.x + vector.x, y: point.y + vector.y }
+          return { ...point, x: point.x + vector.x, y: point.y + vector.y }
         }
         function interpolateRadial(radialPoint1, radialPoint2, amount) {
           const phiDelta = radialPoint2.phi - radialPoint1.phi
@@ -183,6 +183,12 @@
             theta: radialPoint1.theta + thetaDelta * amount
           }
         }
+        function rescale([sourceA, sourceB], [targetA, targetB], sourceValue) {
+          if (sourceValue <= sourceA) return targetA;
+          if (sourceValue >= sourceB) return targetB;
+          const amount = (sourceValue - sourceA) / (sourceB - sourceA)
+          return targetA + amount * (targetB - targetA)
+        }
 
         if (DEBUG) {
           ctx.save()
@@ -192,48 +198,106 @@
           ctx.stroke()
           ctx.restore()
         }
-        const noiseWet = 0.5;
+        const noiseWet = 0.6
         const noiseValue = noise2d(shard.center) * noiseWet + (1 - noiseWet)
+        // const noiseValue = 0;
         const r = shard.boundingCircleRadius
-        const aRadial = { theta: Math.PI / 2, phi: 3 / 6 * Math.PI, r }
-        const bRadial = { theta: Math.PI / 2, phi: 7 / 6 * Math.PI, r }
-        const cRadial = { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r }
+        const triangleRadialPoints = [
+          { theta: Math.PI / 2, phi: 3 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 7 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r },
+        ]
+        const hexagonRadialPoints = [
+          { theta: Math.PI / 2, phi: 3 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 5 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 7 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 9 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 1 / 6 * Math.PI, r },
+        ]
+        const radialPoints = triangleRadialPoints
         const heading = interpolateRadial(shard.heading, state.lightHeading, noiseValue)
-        const a = translate(radialPointToPoint(rotateHeading(rotatePhi(aRadial, shard.rotation), heading)), shard.center)
-        const b = translate(radialPointToPoint(rotateHeading(rotatePhi(bRadial, shard.rotation), heading)), shard.center)
-        const c = translate(radialPointToPoint(rotateHeading(rotatePhi(cRadial, shard.rotation), heading)), shard.center)
+        const points = radialPoints.map(radialPoint =>
+          translate(radialPointToPoint(rotateHeading(rotatePhi(radialPoint, shard.rotation), heading)), shard.center)
+        )
+        const shadowPlaneDepth = Math.max(...points.map(p => p.z)) + 0.1
+        const shadowPoints = points.map(point => {
+          const z = shadowPlaneDepth - point.z;
+          const shadowLength = z / Math.sin(state.lightHeading.theta);
+          const x = point.x + Math.sin(state.lightHeading.phi) * shadowLength
+          const y = point.y + Math.cos(state.lightHeading.phi) * shadowLength
+          return { x, y };
+        })
         const lightAngle = radialPointAngle(state.lightHeading, heading)
-        const intensity = Math.max(0.3, 1 - Math.min(1, lightAngle / (Math.PI / 2)));
-        // console.log(lightAngle)
+        const intensity = rescale([0, 1], [0.1, 1], 1 - Math.min(1, lightAngle / (Math.PI / 2)));
+        // console.log("LIGHT", JSON.stringify(state.lightHeading), JSON.stringify(heading), lightAngle)
 
-        ctx.save()
-        ctx.beginPath()
-        moveTo(a);
-        lineTo(b);
-        lineTo(c);
-        lineTo(a)
-        ctx.closePath();
-        if (DEBUG) {
-          ctx.stroke()
-        } else {
-          ctx.fillStyle = "#000000"
-          ctx.strokeStyle = "#000000"
-          ctx.fill()
-          ctx.globalAlpha = intensity
-          ctx.fillStyle = "#e6b31e"
-          ctx.strokeStyle = "#e6b31e"
-          ctx.fill()
+        // Draw shadow
+        if (pass === "SHADOWS") {
+          ctx.save()
+          ctx.beginPath()
+          moveTo(shadowPoints[0]);
+          shadowPoints.forEach(point => lineTo(point))
+          ctx.closePath();
+          if (DEBUG) {
+            ctx.globalAlpha = 0.1
+            ctx.fillStyle = "#000000"
+            ctx.fill()
+          } else {
+            ctx.fillStyle = "#2a2a2a"
+            ctx.fill()
+          }
+          ctx.restore()
         }
-        ctx.restore()
+
+        if (pass === "SHARDS") {
+          // Draw shard
+          ctx.save()
+          ctx.beginPath()
+          moveTo(points[0]);
+          points.forEach(point => lineTo(point))
+          ctx.closePath();
+          if (DEBUG) {
+            ctx.stroke()
+            ctx.globalAlpha = 1 - intensity
+            ctx.fillStyle = "#000"
+            ctx.fill()
+          } else {
+            ctx.fillStyle = "#000000"
+            ctx.fill()
+            ctx.globalAlpha = intensity
+            ctx.fillStyle = "#e6b31e"
+            ctx.fill()
+          }
+          ctx.restore()
+        }
 
         if (DEBUG) {
-          console.log(noiseValue)
           ctx.save()
           ctx.beginPath()
           ctx.arc(x(shard.center.x), y(shard.center.y), 20 * noiseValue, 0, 2 * Math.PI)
           ctx.fill()
           ctx.closePath()
           ctx.restore()
+        }
+
+        if (DEBUG) {
+          const headingEndLength = 0.5;
+          const headingEndPoint = {
+            x: shard.center.x + Math.cos(heading.phi) * headingEndLength * Math.sign(heading.theta),
+            y: shard.center.y + Math.sin(heading.phi) * headingEndLength * Math.sign(heading.theta),
+          }
+          ctx.save();
+          ctx.beginPath();
+          moveTo(shard.center);
+          lineTo(headingEndPoint);
+          ctx.arc(x(headingEndPoint.x), y(headingEndPoint.y), 5, 0, 2 * Math.PI);
+          ctx.closePath();
+          ctx.strokeStyle = "blue";
+          ctx.fillStyle = "blue";
+          ctx.stroke();
+          ctx.fill();
+          ctx.restore();
         }
 
         ctx.restore();
@@ -285,7 +349,7 @@
     }
 
     function isShardValid(center, radius) {
-      const gap = 0.05
+      const gap = 0.1
       return state.shards.every(shard =>
         distance2d([shard.center.x, shard.center.y], [center.x, center.y]) > shard.boundingCircleRadius + radius + gap
       )
@@ -297,7 +361,7 @@
 
     // Returns noise in <0, 1> range
     function noise2d(point) {
-      const scale = 10;
+      const scale = 30;
       return (noise.perlin2(point.x / scale, point.y / scale) + 1) / 2
     }
 
