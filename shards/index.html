@@ -20,7 +20,7 @@
     // [x] Rotate shards in 3D
     // [x] Rotation based on noise
     // [x] Color based on rotation (lighting)
-    // [ ] Drop shadows
+    // [x] Drop shadows
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const unitLength = 30;
@@ -214,6 +214,27 @@
           { theta: Math.PI / 2, phi: 9 / 6 * Math.PI, r },
           { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r },
           { theta: Math.PI / 2, phi: 1 / 6 * Math.PI, r },
+        ]
+        const squareRadialPoints = [
+          { theta: Math.PI / 2, phi: 1 / 2 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 2 / 2 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 3 / 2 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 4 / 2 * Math.PI, r },
+        ]
+        const starDepth = 0.75
+        const starRadialPoints = [
+          { theta: Math.PI / 2, phi: 1 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 2 / 6 * Math.PI, r: r * starDepth },
+          { theta: Math.PI / 2, phi: 3 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 4 / 6 * Math.PI, r: r * starDepth },
+          { theta: Math.PI / 2, phi: 5 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 6 / 6 * Math.PI, r: r * starDepth },
+          { theta: Math.PI / 2, phi: 7 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 8 / 6 * Math.PI, r: r * starDepth },
+          { theta: Math.PI / 2, phi: 9 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 10 / 6 * Math.PI, r: r * starDepth },
+          { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r },
+          { theta: Math.PI / 2, phi: 12 / 6 * Math.PI, r: r * starDepth },
         ]
         const radialPoints = triangleRadialPoints
         const heading = interpolateRadial(shard.heading, state.lightHeading, noiseValue)
