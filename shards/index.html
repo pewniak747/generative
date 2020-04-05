@@ -13,21 +13,23 @@
       margin: 0;
     }
   </style>
+  <script src="perlin.js"></script>
   <script>
     // TODO:
     // [x] Draw basic shards
     // [x] Rotate shards in 3D
-    // [ ] Rotation based on noise
+    // [x] Rotation based on noise
     // [x] Color based on rotation (lighting)
     // [ ] Drop shadows
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
-    const unitLength = 50;
+    const unitLength = 30;
     let DEBUG = false;
 
     const state = {
       shards: [],
-      maxShards: 500,
+      maxShards: 5000,
+      lightHeading: { phi: - 3 / 4 * Math.PI, theta: Math.PI / 4 },
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
         lowerRightCorner: { x: 5, y: -5 }
@@ -74,7 +76,9 @@
       state.bounds.lowerRightCorner.y = invertY(height - gapPx);
     }
     function handleCanvasClick(event) {
-      // restart();
+      restart();
+    }
+    function handleCanvasMousemove(event) {
       const x = invertX(event.x)
       const y = invertY(event.y)
       const phi = Math.max(-1, Math.min(1, y)) * Math.PI
@@ -170,6 +174,16 @@
         function translate(point, vector) {
           return { x: point.x + vector.x, y: point.y + vector.y }
         }
+        function interpolateRadial(radialPoint1, radialPoint2, amount) {
+          const phiDelta = radialPoint2.phi - radialPoint1.phi
+          const thetaDelta = radialPoint2.theta - radialPoint1.theta
+          return {
+            ...radialPoint1,
+            phi: radialPoint1.phi + phiDelta * amount,
+            theta: radialPoint1.theta + thetaDelta * amount
+          }
+        }
+
         if (DEBUG) {
           ctx.save()
           ctx.beginPath()
@@ -178,18 +192,20 @@
           ctx.stroke()
           ctx.restore()
         }
+        const noiseWet = 0.5;
+        const noiseValue = noise2d(shard.center) * noiseWet + (1 - noiseWet)
         const r = shard.boundingCircleRadius
         const aRadial = { theta: Math.PI / 2, phi: 3 / 6 * Math.PI, r }
         const bRadial = { theta: Math.PI / 2, phi: 7 / 6 * Math.PI, r }
         const cRadial = { theta: Math.PI / 2, phi: 11 / 6 * Math.PI, r }
-        const a = translate(radialPointToPoint(rotateHeading(rotatePhi(aRadial, shard.rotation), shard.heading)), shard.center)
-        const b = translate(radialPointToPoint(rotateHeading(rotatePhi(bRadial, shard.rotation), shard.heading)), shard.center)
-        const c = translate(radialPointToPoint(rotateHeading(rotatePhi(cRadial, shard.rotation), shard.heading)), shard.center)
-        const lightHeading = { phi: - 3 / 4 * Math.PI, theta: Math.PI / 4 }
-        // const lightHeading = { phi: 0, theta: 0 }
-        const lightAngle = radialPointAngle(lightHeading, shard.heading)
-        const intensity = 1 - (lightAngle / Math.PI);
+        const heading = interpolateRadial(shard.heading, state.lightHeading, noiseValue)
+        const a = translate(radialPointToPoint(rotateHeading(rotatePhi(aRadial, shard.rotation), heading)), shard.center)
+        const b = translate(radialPointToPoint(rotateHeading(rotatePhi(bRadial, shard.rotation), heading)), shard.center)
+        const c = translate(radialPointToPoint(rotateHeading(rotatePhi(cRadial, shard.rotation), heading)), shard.center)
+        const lightAngle = radialPointAngle(state.lightHeading, heading)
+        const intensity = Math.max(0.3, 1 - Math.min(1, lightAngle / (Math.PI / 2)));
         // console.log(lightAngle)
+
         ctx.save()
         ctx.beginPath()
         moveTo(a);
@@ -200,11 +216,26 @@
         if (DEBUG) {
           ctx.stroke()
         } else {
-          ctx.fillStyle = "#e6b31e"
+          ctx.fillStyle = "#000000"
+          ctx.strokeStyle = "#000000"
+          ctx.fill()
           ctx.globalAlpha = intensity
+          ctx.fillStyle = "#e6b31e"
+          ctx.strokeStyle = "#e6b31e"
           ctx.fill()
         }
         ctx.restore()
+
+        if (DEBUG) {
+          console.log(noiseValue)
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(x(shard.center.x), y(shard.center.y), 20 * noiseValue, 0, 2 * Math.PI)
+          ctx.fill()
+          ctx.closePath()
+          ctx.restore()
+        }
+
         ctx.restore();
       })
     }
@@ -220,7 +251,7 @@
       const bounds = state.bounds;
       const boundingCircleRadius = 0.3 + (Math.random() - 0.5) * 0.1;
       // const boundingCircleRadius = 1;
-      const rotation = Math.random() * Math.PI * 2;
+      const rotation = Math.random() * 2 * Math.PI // Math.sign(Math.random() - 0.5) * Math.PI / 2;
       const phi = Math.random() * Math.PI * 2;
       const theta = (Math.random() * 2 - 1) * Math.PI / 3
       // const rotation = 0
@@ -264,13 +295,20 @@
       return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
     }
 
+    // Returns noise in <0, 1> range
+    function noise2d(point) {
+      const scale = 10;
+      return (noise.perlin2(point.x / scale, point.y / scale) + 1) / 2
+    }
+
     adjustCanvasSize();
     window.addEventListener('resize', () => adjustCanvasSize());
     window.addEventListener('resize', () => draw());
     canvas.addEventListener('click', handleCanvasClick);
-    // canvas.addEventListener('mousemove', handleCanvasClick);
+    // canvas.addEventListener('mousemove', handleCanvasMousemove);
 
     function restart() {
+      noise.seed(Math.random());
       state.shards = [];
       for (let i = 0; i < 2000; i += 1) {
         if (state.shards.length < state.maxShards) {
