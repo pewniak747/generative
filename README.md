@@ -2,6 +2,10 @@
 
 Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
 
+#### shards
+
+[https://pewniak747.github.io/generative/shards](https://pewniak747.github.io/generative/shards)
+
 #### ribbons
 
 [https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)
