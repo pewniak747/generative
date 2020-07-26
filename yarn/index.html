@@ -1,0 +1,451 @@
+<html>
+
+<head>
+  <title>Yarn</title>
+  <meta charset="utf-8">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <script src="perlin.js"></script>
+  <script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 100;
+    let DEBUG = false;
+
+    const CLOCKWISE = "CLOCKWISE"
+    const COUNTERCLOCKWISE = "COUNTER-CLOCKWISE"
+
+    const state = {
+      pins: [],
+      threads: [],
+      maxPins: 10,
+      bounds: {
+        upperLeftCorner: { x: -5, y: 5 },
+        lowerRightCorner: { x: 5, y: -5 }
+      }
+    };
+
+    appendNewPin();
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
+      return value;
+    }
+    function invertY(yValue) {
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+
+      const gapPx = 50;
+      state.bounds.upperLeftCorner.x = invertX(gapPx);
+      state.bounds.upperLeftCorner.y = invertY(gapPx);
+      state.bounds.lowerRightCorner.x = invertX(width - gapPx);
+      state.bounds.lowerRightCorner.y = invertY(height - gapPx);
+    }
+    function handleCanvasClick(event) {
+      const x = invertX(event.clientX);
+      const y = invertY(event.clientY);
+      const clickedPin = state.pins.find(pin => {
+        return distance2d([x, y], [pin.center.x, pin.center.y]) < pin.innerRadius
+      })
+      if (clickedPin) {
+        const direction = clickedPin.direction === CLOCKWISE ? COUNTERCLOCKWISE : CLOCKWISE
+        clickedPin.direction = direction
+        draw()
+      } else {
+        restart();
+      }
+    }
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = '#343434';
+      }
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      if (DEBUG) {
+        ctx.save();
+        ctx.moveTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.upperLeftCorner.y));
+        ctx.lineTo(x(state.bounds.lowerRightCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.lineTo(x(state.bounds.upperLeftCorner.x), y(state.bounds.lowerRightCorner.y));
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      drawThreads();
+      drawPins();
+    }
+
+    function drawPins() {
+      state.pins.forEach(pin => {
+        ctx.save();
+
+        function moveTo(point) {
+          ctx.moveTo(x(point.x), y(point.y));
+        }
+        function lineTo(point) {
+          ctx.lineTo(x(point.x), y(point.y));
+        }
+
+        if (DEBUG) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.innerRadius), 0, 2 * Math.PI)
+          ctx.closePath()
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        if (DEBUG) {
+          ctx.save()
+          ctx.textAlign = "center"
+          ctx.textBaseline = "middle"
+          ctx.font = "20px sans-serif"
+          const text = pin.direction === CLOCKWISE ? "R" : "L"
+          ctx.fillText(text, x(pin.center.x), y(pin.center.y))
+          ctx.restore()
+        }
+
+        if (!DEBUG) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
+          ctx.closePath()
+          ctx.strokeStyle = "#333"
+          ctx.fillStyle = "#666"
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        ctx.restore();
+      })
+    }
+
+    function drawThreads() {
+      state.threads.forEach(thread => {
+        ctx.save();
+
+        function moveTo(point) {
+          ctx.moveTo(x(point.x), y(point.y));
+        }
+        function lineTo(point) {
+          ctx.lineTo(x(point.x), y(point.y));
+        }
+
+        const points = calculateThreadPoints(thread, state.pins)
+        console.log(points)
+
+        if (DEBUG) {
+          ctx.save()
+          ctx.beginPath()
+          points.forEach((point, idx) => {
+            if (idx === 0) {
+              moveTo(point)
+            } else {
+              const startPoint = points[idx - 1]
+              const endPoint = point
+              if (startPoint.pinId === endPoint.pinId) {
+                const pin = findPin(state.pins, startPoint.pinId)
+                const startAngle = calculateAngle(pin.center, startPoint)
+                const endAngle = calculateAngle(pin.center, endPoint)
+                const radius = pin.innerRadius + thread.radius
+                const counterclockwise = pin.direction === COUNTERCLOCKWISE
+                ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
+              } else {
+                lineTo(endPoint)
+              }
+            }
+          })
+          ctx.strokeStyle = "red"
+          ctx.stroke()
+          ctx.restore()
+        }
+        if (DEBUG) {
+          points.forEach((point, idx) => {
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(x(point.x), y(point.y), scale(thread.radius), 0, 2 * Math.PI)
+            ctx.closePath()
+            ctx.lineWidth = 2
+            ctx.strokeStyle = "red"
+            ctx.fillStyle = "red"
+            ctx.textAlign = "center"
+            ctx.textBaseline = "middle"
+            ctx.font = "12px sans-serif"
+            ctx.stroke()
+            ctx.fillText(idx + 1, x(point.x), y(point.y))
+            ctx.restore()
+          })
+        }
+
+        if (!DEBUG) {
+          ctx.save()
+          ctx.beginPath()
+          points.forEach((point, idx) => {
+            if (idx === 0) {
+              moveTo(point)
+            } else {
+              const startPoint = points[idx - 1]
+              const endPoint = point
+              if (startPoint.pinId === endPoint.pinId) {
+                const pin = findPin(state.pins, startPoint.pinId)
+                const startAngle = calculateAngle(pin.center, startPoint)
+                const endAngle = calculateAngle(pin.center, endPoint)
+                const radius = pin.innerRadius + thread.radius
+                const counterclockwise = pin.direction === COUNTERCLOCKWISE
+                ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
+              } else {
+                lineTo(endPoint)
+              }
+            }
+          })
+          ctx.strokeStyle = thread.color
+          ctx.lineCap = "round"
+          ctx.lineWidth = scale(thread.radius) * 2
+          ctx.stroke()
+          ctx.restore()
+        }
+
+        ctx.restore();
+      })
+    }
+
+    function calculateAngle(centerPoint, point) {
+      return Math.atan2(centerPoint.y - point.y, centerPoint.x - point.x)
+    }
+
+    function findPin(pins, pinId) {
+      return pins.find(pin => pin.id === pinId)
+    }
+
+    function calculateThreadPoints(thread, pins) {
+      const startPin = findPin(pins, thread.pinIds[0])
+      const endPin = findPin(pins, thread.pinIds[thread.pinIds.length - 1])
+      const startFollowX = startPin.center.x + ((startPin.direction === CLOCKWISE ? -1 : 1) * (startPin.innerRadius + thread.radius))
+      const endFollowX = endPin.center.x + ((endPin.direction === CLOCKWISE ? 1 : -1) * (endPin.innerRadius + thread.radius))
+      const startPoint = {
+        x: startFollowX,
+        y: startPin.center.y - thread.slack.start,
+        pinId: null
+      }
+      const startFollowPoint = {
+        x: startFollowX,
+        y: startPin.center.y,
+        pinId: startPin.id
+      }
+      const endPoint = {
+        x: endFollowX,
+        y: endPin.center.y - thread.slack.end,
+        pinId: null
+      }
+      const endFollowPoint = {
+        x: endFollowX,
+        y: endPin.center.y,
+        pinId: endPin.id
+      }
+
+      let intermediatePoints = []
+      for (let i = 0; i < thread.pinIds.length - 1; i += 1) {
+        intermediatePoints = [
+          ...intermediatePoints,
+          ...calculateThreadPointsBetweenPins(thread, findPin(pins, thread.pinIds[i]), findPin(pins, thread.pinIds[i + 1]))
+        ]
+      }
+
+      return [startPoint, startFollowPoint, ...intermediatePoints, endFollowPoint, endPoint]
+    }
+
+    function calculateThreadPointsBetweenPins(thread, startPin, endPin) {
+      // http://www.ambrsoft.com/TrigoCalc/Circles2/Circles2Tangent_.htm
+      if (startPin.direction === endPin.direction) {
+        // Calculate the outer tangents
+        if (startPin.innerRadius !== endPin.innerRadius) {
+          throw new Error("Inner radius' of pins must be equal")
+        }
+        const phi = Math.atan2(endPin.center.y - startPin.center.y, endPin.center.x - startPin.center.x)
+        const r = startPin.innerRadius + thread.radius;
+        const x1 = startPin.center.x + r * Math.sin(phi)
+        const x2 = startPin.center.x - r * Math.sin(phi)
+        const x3 = endPin.center.x + r * Math.sin(phi)
+        const x4 = endPin.center.x - r * Math.sin(phi)
+        const y1 = startPin.center.y - r * Math.cos(phi)
+        const y2 = startPin.center.y + r * Math.cos(phi)
+        const y3 = endPin.center.y - r * Math.cos(phi)
+        const y4 = endPin.center.y + r * Math.cos(phi)
+        if (startPin.direction === CLOCKWISE) {
+          return [
+            { x: x2, y: y2, pinId: startPin.id },
+            { x: x4, y: y4, pinId: endPin.id }
+          ]
+        }
+        else if (startPin.direction === COUNTERCLOCKWISE) {
+          return [
+            { x: x1, y: y1, pinId: startPin.id },
+            { x: x3, y: y3, pinId: endPin.id }
+          ]
+        } else {
+          throw new Error("Unexpected condition")
+        }
+      } else {
+        const a = startPin.center.x
+        const b = startPin.center.y
+        const c = endPin.center.x
+        const d = endPin.center.y
+        const r0 = startPin.innerRadius + thread.radius
+        const r1 = endPin.innerRadius + thread.radius
+
+        const xp = (c * r0 + a * r1) / (r0 + r1)
+        const yp = (d * r0 + b * r1) / (r0 + r1)
+
+        const x1 = (Math.pow(r0, 2) * (xp - a) + r0 * (yp - b) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + a
+        const x2 = (Math.pow(r0, 2) * (xp - a) - r0 * (yp - b) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + a
+        const y1 = (Math.pow(r0, 2) * (yp - b) - r0 * (xp - a) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + b
+        const y2 = (Math.pow(r0, 2) * (yp - b) + r0 * (xp - a) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + b
+        const x3 = (Math.pow(r1, 2) * (xp - c) + r1 * (yp - d) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + c
+        const y3 = (Math.pow(r1, 2) * (yp - d) - r1 * (xp - c) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + d
+        const x4 = (Math.pow(r1, 2) * (xp - c) - r1 * (yp - d) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + c
+        const y4 = (Math.pow(r1, 2) * (yp - d) + r1 * (xp - c) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + d
+        if (startPin.direction === CLOCKWISE) {
+          return [
+            { x: x2, y: y2, pinId: startPin.id },
+            { x: x4, y: y4, pinId: endPin.id }
+          ]
+        }
+        else if (startPin.direction === COUNTERCLOCKWISE) {
+          return [
+            { x: x1, y: y1, pinId: startPin.id },
+            { x: x3, y: y3, pinId: endPin.id }
+          ]
+        } else {
+          throw new Error("Unexpected condition")
+        }
+      }
+    }
+
+    function appendNewPin() {
+      // TODO
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    // Returns noise in <0, 1> range
+    function noise2d(point) {
+      const scale = 30;
+      return (noise.perlin2(point.x / scale, point.y / scale) + 1) / 2
+    }
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+
+    function restart() {
+      noise.seed(Math.random());
+      state.pins = []
+      state.threads = []
+
+      const pinInnerRadius = 0.05
+      const pinOuterRadius = 0.07
+      state.pins = [
+        {
+          id: 1,
+          center: { x: -1, y: -1 },
+          innerRadius: pinInnerRadius,
+          outerRadius: pinOuterRadius,
+          direction: CLOCKWISE
+        },
+        {
+          id: 2,
+          center: { x: 0, y: 0 },
+          innerRadius: pinInnerRadius,
+          outerRadius: pinOuterRadius,
+          direction: CLOCKWISE
+        },
+        {
+          id: 3,
+          center: { x: 1, y: -0.5 },
+          innerRadius: pinInnerRadius,
+          outerRadius: pinOuterRadius,
+          direction: COUNTERCLOCKWISE
+        },
+        {
+          id: 4,
+          center: { x: 1.9, y: 1.5 },
+          innerRadius: pinInnerRadius,
+          outerRadius: pinOuterRadius,
+          direction: COUNTERCLOCKWISE
+        },
+        {
+          id: 5,
+          center: { x: 0.6, y: 2.3 },
+          innerRadius: pinInnerRadius,
+          outerRadius: pinOuterRadius,
+          direction: CLOCKWISE
+        }
+      ]
+
+      const threadColor = "#dd3633";
+      const threadRadius = 0.02
+      const pinIds = state.pins.map(pin => pin.id).sort(() => Math.random() - 0.5)
+      state.threads = [
+        {
+          pinIds: pinIds,
+          radius: threadRadius,
+          slack: {
+            start: 0.25,
+            end: 0.5
+          },
+          color: threadColor
+        }
+      ]
+      draw();
+    }
+    restart();
+  </script>
+</body>
+
+</html>
