@@ -15,9 +15,17 @@
   </style>
   <script src="perlin.js"></script>
   <script>
+    // TODO:
+    // [ ] always wrap around a pin if angle is small
+    // [ ] draw thread hanging more loosely
+
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const unitLength = 100;
+    const pinInnerRadius = 0.05
+    const pinOuterRadius = 0.07
+    const threadColor = "#dd3633";
+    const threadRadius = 0.02
     let DEBUG = false;
 
     const CLOCKWISE = "CLOCKWISE"
@@ -32,8 +40,6 @@
         lowerRightCorner: { x: 5, y: -5 }
       }
     };
-
-    appendNewPin();
 
     // Positioning
     const devicePixelRatio = window.devicePixelRatio || 1;
@@ -148,15 +154,17 @@
         }
 
         if (!DEBUG) {
-          ctx.save()
-          ctx.beginPath()
-          ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
-          ctx.closePath()
-          ctx.strokeStyle = "#333"
-          ctx.fillStyle = "#666"
-          ctx.fill()
-          ctx.stroke()
-          ctx.restore()
+          if (state.threads.some(thread => thread.pinIds.includes(pin.id))) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
+            ctx.closePath()
+            ctx.strokeStyle = "#333"
+            ctx.fillStyle = "#666"
+            ctx.fill()
+            ctx.stroke()
+            ctx.restore()
+          }
         }
 
         ctx.restore();
@@ -175,7 +183,6 @@
         }
 
         const points = calculateThreadPoints(thread, state.pins)
-        console.log(points)
 
         if (DEBUG) {
           ctx.save()
@@ -364,8 +371,99 @@
       }
     }
 
-    function appendNewPin() {
-      // TODO
+    function generatePinsInCircle(numPins, radius) {
+      const pins = []
+      for (let i = 0; i < numPins; i += 1) {
+        const angle = 2 * Math.PI * (i / numPins)
+        pins.push(
+          {
+            id: i + 1,
+            center: { x: radius * Math.sin(angle), y: radius * Math.cos(angle) },
+            innerRadius: pinInnerRadius,
+            outerRadius: pinOuterRadius,
+            direction: Math.random() > 0.5 ? CLOCKWISE : COUNTERCLOCKWISE
+          })
+      }
+      return pins
+    }
+
+    function generatePinsRandom(numPins, minGap) {
+      const pins = []
+      function generateNewPin() {
+        const bounds = state.bounds;
+        let pinCandidate = {
+          center: { x: 0, y: 0 },
+          innerRadius: pinInnerRadius, outerRadius: pinOuterRadius,
+          direction: Math.random() > 0.5 ? CLOCKWISE : COUNTERCLOCKWISE
+        };
+        let ok = false;
+        let iterations = 0;
+        while (iterations < 30) {
+          pinCandidate.center.x = bounds.upperLeftCorner.x + Math.random() * (bounds.lowerRightCorner.x - bounds.upperLeftCorner.x)
+          pinCandidate.center.y = bounds.lowerRightCorner.y + Math.random() * (bounds.upperLeftCorner.y - bounds.lowerRightCorner.y)
+          if (isPinValid(pinCandidate.center, pinCandidate.outerRadius)) {
+            ok = true;
+            break;
+          } else {
+            iterations += 1;
+          }
+        }
+        if (ok) {
+          pins.push({ ...pinCandidate, id: pins.length + 1 });
+        }
+      }
+
+      function isPinValid(center, radius) {
+        return pins.every(pin =>
+          distance2d([pin.center.x, pin.center.y], [center.x, center.y]) > pin.outerRadius + radius + minGap
+        )
+      }
+
+      for (let i = 0; i < numPins; i += 1) {
+        generateNewPin()
+      }
+      return pins
+    }
+
+    function generateThreadRandom(pins, length) {
+      const pinIds = pins.map(pin => [pin.id, Math.random()]).sort((a, b) => a[1] - b[1]).map(a => a[0]).slice(0, length)
+      return {
+        pinIds: pinIds,
+        radius: threadRadius,
+        slack: {
+          start: 0.25,
+          end: 0.5
+        },
+        color: threadColor
+      }
+    }
+
+    function generateThreadClosest(pins, length, color) {
+      const pinIds = []
+      const distanceWeight = 0.75
+      for (let i = 0; i < length; i += 1) {
+        if (i === 0) {
+          pinIds.push(pins[Math.floor(Math.random() * pins.length)].id)
+        } else {
+          const previousPin = findPin(pins, pinIds[i - 1]);
+          const available = pins
+            .filter(pin => !pinIds.includes(pin.id))
+            .map(pin => [pin, distance2d([previousPin.center.x, previousPin.center.y], [pin.center.x, pin.center.y])])
+            .map(([pin, distance]) => [pin, distanceWeight * distance + (1 - distanceWeight) * Math.random()])
+            .sort((a, b) => a[1] - b[1])
+          const chosenPin = available[0][0]
+          pinIds.push(chosenPin.id)
+        }
+      }
+      return {
+        pinIds: pinIds,
+        radius: threadRadius,
+        slack: {
+          start: 0.25,
+          end: 0.5
+        },
+        color: color
+      }
     }
 
     function distance2d([x1, y1], [x2, y2]) {
@@ -387,60 +485,13 @@
       noise.seed(Math.random());
       state.pins = []
       state.threads = []
+      // state.pins = generatePinsInCircle(10, 2)
+      state.pins = generatePinsRandom(200, 0.5)
 
-      const pinInnerRadius = 0.05
-      const pinOuterRadius = 0.07
-      state.pins = [
-        {
-          id: 1,
-          center: { x: -1, y: -1 },
-          innerRadius: pinInnerRadius,
-          outerRadius: pinOuterRadius,
-          direction: CLOCKWISE
-        },
-        {
-          id: 2,
-          center: { x: 0, y: 0 },
-          innerRadius: pinInnerRadius,
-          outerRadius: pinOuterRadius,
-          direction: CLOCKWISE
-        },
-        {
-          id: 3,
-          center: { x: 1, y: -0.5 },
-          innerRadius: pinInnerRadius,
-          outerRadius: pinOuterRadius,
-          direction: COUNTERCLOCKWISE
-        },
-        {
-          id: 4,
-          center: { x: 1.9, y: 1.5 },
-          innerRadius: pinInnerRadius,
-          outerRadius: pinOuterRadius,
-          direction: COUNTERCLOCKWISE
-        },
-        {
-          id: 5,
-          center: { x: 0.6, y: 2.3 },
-          innerRadius: pinInnerRadius,
-          outerRadius: pinOuterRadius,
-          direction: CLOCKWISE
-        }
-      ]
-
-      const threadColor = "#dd3633";
-      const threadRadius = 0.02
-      const pinIds = state.pins.map(pin => pin.id).sort(() => Math.random() - 0.5)
       state.threads = [
-        {
-          pinIds: pinIds,
-          radius: threadRadius,
-          slack: {
-            start: 0.25,
-            end: 0.5
-          },
-          color: threadColor
-        }
+        // generateThreadClosest(state.pins, 8, threadColor),
+        // generateThreadClosest(state.pins, 7, threadColor),
+        generateThreadClosest(state.pins, 22, threadColor)
       ]
       draw();
     }
