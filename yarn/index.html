@@ -466,6 +466,41 @@
       }
     }
 
+    function generateThreadCluster(pins, length, color) {
+      const pinIds = []
+      const distanceWeight = 0.75
+      for (let i = 0; i < length; i += 1) {
+        if (i === 0) {
+          pinIds.push(pins[Math.floor(Math.random() * pins.length)].id)
+        } else {
+          const centroidX = pinIds
+            .map(pinId => findPin(pins, pinId))
+            .map(pin => pin.center.x)
+            .reduce((acc, x) => acc + x, 0) / pins.length
+          const centroidY = pinIds
+            .map(pinId => findPin(pins, pinId))
+            .map(pin => pin.center.y)
+            .reduce((acc, y) => acc + y, 0) / pins.length
+          const available = pins
+            .filter(pin => !pinIds.includes(pin.id))
+            .map(pin => [pin, distance2d([centroidX, centroidY], [pin.center.x, pin.center.y])])
+            .map(([pin, distance]) => [pin, distanceWeight * distance + (1 - distanceWeight) * Math.random()])
+            .sort((a, b) => a[1] - b[1])
+          const chosenPin = available[0][0]
+          pinIds.push(chosenPin.id)
+        }
+      }
+      return {
+        pinIds: pinIds,
+        radius: threadRadius,
+        slack: {
+          start: 0.25,
+          end: 0.5
+        },
+        color: color
+      }
+    }
+
     function distance2d([x1, y1], [x2, y2]) {
       return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
     }
@@ -491,7 +526,8 @@
       state.threads = [
         // generateThreadClosest(state.pins, 8, threadColor),
         // generateThreadClosest(state.pins, 7, threadColor),
-        generateThreadClosest(state.pins, 22, threadColor)
+        // generateThreadClosest(state.pins, 22, threadColor)
+        generateThreadCluster(state.pins, 10, threadColor)
       ]
       draw();
     }
