@@ -18,12 +18,13 @@
     // TODO:
     // [ ] always wrap around a pin if angle is small
     // [ ] draw thread hanging more loosely
+    // [ ] always wrap around a pin if thread is close enough
 
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
-    const unitLength = 100;
-    const pinInnerRadius = 0.05
-    const pinOuterRadius = 0.07
+    const unitLength = 200;
+    const pinInnerRadius = 0.03
+    const pinOuterRadius = 0.04
     const threadColor = "#dd3633";
     const threadRadius = 0.02
     let DEBUG = false;
@@ -227,32 +228,61 @@
           })
         }
 
+        function drawThreadLine(startPoint, endPoint, type) {
+          const outerWidth = scale(thread.radius) * 2
+          const innerWidth = outerWidth - 2
+          if (startPoint.pinId === endPoint.pinId) {
+            ctx.save()
+            ctx.beginPath()
+            const pin = findPin(state.pins, startPoint.pinId)
+            const startAngle = calculateAngle(pin.center, startPoint)
+            const endAngle = calculateAngle(pin.center, endPoint)
+            const radius = pin.innerRadius + thread.radius
+            const counterclockwise = pin.direction === COUNTERCLOCKWISE
+            ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
+            ctx.lineCap = "round"
+            if (type === "OUTER") {
+              ctx.strokeStyle = "#333"
+              ctx.lineWidth = outerWidth
+            }
+            if (type === "INNER") {
+              ctx.strokeStyle = thread.color
+              ctx.lineWidth = innerWidth
+            }
+            ctx.stroke()
+            ctx.restore()
+          } else {
+            ctx.save()
+            ctx.beginPath()
+            moveTo(startPoint)
+            lineTo(endPoint)
+            ctx.lineCap = "round"
+            if (type === "OUTER") {
+              ctx.strokeStyle = "#333"
+              ctx.lineWidth = outerWidth
+            }
+            if (type === "INNER") {
+              ctx.strokeStyle = thread.color
+              ctx.lineWidth = innerWidth
+            }
+            ctx.stroke()
+            ctx.restore()
+          }
+        }
+
         if (!DEBUG) {
-          ctx.save()
-          ctx.beginPath()
           points.forEach((point, idx) => {
-            if (idx === 0) {
-              moveTo(point)
-            } else {
+            if (idx > 0) {
               const startPoint = points[idx - 1]
               const endPoint = point
-              if (startPoint.pinId === endPoint.pinId) {
-                const pin = findPin(state.pins, startPoint.pinId)
-                const startAngle = calculateAngle(pin.center, startPoint)
-                const endAngle = calculateAngle(pin.center, endPoint)
-                const radius = pin.innerRadius + thread.radius
-                const counterclockwise = pin.direction === COUNTERCLOCKWISE
-                ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
-              } else {
-                lineTo(endPoint)
+              drawThreadLine(startPoint, endPoint, "OUTER")
+              drawThreadLine(startPoint, endPoint, "INNER")
+              if (idx > 1) {
+                const previousStartPoint = points[idx - 2]
+                drawThreadLine(previousStartPoint, startPoint, "INNER")
               }
             }
           })
-          ctx.strokeStyle = thread.color
-          ctx.lineCap = "round"
-          ctx.lineWidth = scale(thread.radius) * 2
-          ctx.stroke()
-          ctx.restore()
         }
 
         ctx.restore();
@@ -521,12 +551,12 @@
       state.pins = []
       state.threads = []
       // state.pins = generatePinsInCircle(10, 2)
-      state.pins = generatePinsRandom(200, 0.5)
+      state.pins = generatePinsRandom(200, 0.2)
 
       state.threads = [
-        // generateThreadClosest(state.pins, 8, threadColor),
-        // generateThreadClosest(state.pins, 7, threadColor),
-        // generateThreadClosest(state.pins, 22, threadColor)
+        generateThreadClosest(state.pins, 8, threadColor),
+        generateThreadClosest(state.pins, 7, threadColor),
+        generateThreadClosest(state.pins, 22, threadColor),
         generateThreadCluster(state.pins, 10, threadColor)
       ]
       draw();
