@@ -16,7 +16,7 @@
   <script src="perlin.js"></script>
   <script>
     // TODO:
-    // [ ] always wrap around a pin if angle is small
+    // [x] always wrap around a pin if angle is small
     // [ ] draw thread hanging more loosely
     // [ ] always wrap around a pin if thread is close enough
 
@@ -149,7 +149,7 @@
           ctx.textAlign = "center"
           ctx.textBaseline = "middle"
           ctx.font = "20px sans-serif"
-          const text = pin.direction === CLOCKWISE ? "R" : "L"
+          const text = (pin.direction === CLOCKWISE ? "R" : "L") + pin.id
           ctx.fillText(text, x(pin.center.x), y(pin.center.y))
           ctx.restore()
         }
@@ -228,15 +228,23 @@
           })
         }
 
-        function drawThreadLine(startPoint, endPoint, type) {
+        function drawThreadLine(startPoint, endPoint, type, mode) {
           const outerWidth = scale(thread.radius) * 2
-          const innerWidth = outerWidth - 2
+          const innerWidth = outerWidth - 4
           if (startPoint.pinId === endPoint.pinId) {
             ctx.save()
             ctx.beginPath()
             const pin = findPin(state.pins, startPoint.pinId)
-            const startAngle = calculateAngle(pin.center, startPoint)
-            const endAngle = calculateAngle(pin.center, endPoint)
+            let startAngle = calculateAngle(pin.center, startPoint)
+            let endAngle = calculateAngle(pin.center, endPoint)
+            if (mode === "STROKE" && shouldWrapAround(state.pins, startPoint, endPoint)) {
+              // console.log("ANGLE TOO SMALL", startPoint.pinId, Math.abs(endAngle - startAngle))
+              startAngle = Math.PI
+              endAngle = -1 * Math.PI
+            }
+            if (mode === "MASK") {
+              startAngle = pin.direction === CLOCKWISE ? endAngle + Math.PI / 4 : endAngle - Math.PI / 4
+            }
             const radius = pin.innerRadius + thread.radius
             const counterclockwise = pin.direction === COUNTERCLOCKWISE
             ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
@@ -249,6 +257,7 @@
               ctx.strokeStyle = thread.color
               ctx.lineWidth = innerWidth
             }
+            // if (mode === "MASK") ctx.strokeStyle = "yellow"
             ctx.stroke()
             ctx.restore()
           } else {
@@ -265,6 +274,7 @@
               ctx.strokeStyle = thread.color
               ctx.lineWidth = innerWidth
             }
+            // if (!wrap) ctx.strokeStyle = "yellow"
             ctx.stroke()
             ctx.restore()
           }
@@ -275,18 +285,30 @@
             if (idx > 0) {
               const startPoint = points[idx - 1]
               const endPoint = point
-              drawThreadLine(startPoint, endPoint, "OUTER")
-              drawThreadLine(startPoint, endPoint, "INNER")
+              drawThreadLine(startPoint, endPoint, "OUTER", "STROKE")
+              drawThreadLine(startPoint, endPoint, "INNER", "STROKE")
               if (idx > 1) {
                 const previousStartPoint = points[idx - 2]
-                drawThreadLine(previousStartPoint, startPoint, "INNER")
+                if (!shouldWrapAround(state.pins, startPoint, endPoint)) {
+                  drawThreadLine(previousStartPoint, startPoint, "INNER", "MASK")
+                }
               }
             }
+            // debugger
           })
         }
 
         ctx.restore();
       })
+    }
+
+    function shouldWrapAround(pins, startPoint, endPoint) {
+      if (startPoint.pinId !== endPoint.pinId) return false
+      const pin = findPin(pins, startPoint.pinId)
+      let startAngle = calculateAngle(pin.center, startPoint)
+      let endAngle = calculateAngle(pin.center, endPoint)
+      const diffAngle = (pin.direction === COUNTERCLOCKWISE ? endAngle - startAngle + 2 * Math.PI : startAngle - endAngle + 2 * Math.PI) % (2 * Math.PI)
+      return (diffAngle < Math.PI / 2)
     }
 
     function calculateAngle(centerPoint, point) {
@@ -554,10 +576,10 @@
       state.pins = generatePinsRandom(200, 0.2)
 
       state.threads = [
-        generateThreadClosest(state.pins, 8, threadColor),
-        generateThreadClosest(state.pins, 7, threadColor),
+        // generateThreadClosest(state.pins, 8, threadColor),
+        //generateThreadClosest(state.pins, 7, threadColor),
         generateThreadClosest(state.pins, 22, threadColor),
-        generateThreadCluster(state.pins, 10, threadColor)
+        //generateThreadCluster(state.pins, 10, threadColor)
       ]
       draw();
     }
