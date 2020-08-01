@@ -23,8 +23,8 @@
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const unitLength = 200;
-    const pinInnerRadius = 0.03
-    const pinOuterRadius = 0.04
+    const pinInnerRadius = 0.02
+    const pinOuterRadius = 0.03
     const threadColor = "#dd3633";
     const threadRadius = 0.02
     let DEBUG = false;
@@ -104,7 +104,7 @@
       if (DEBUG) {
         ctx.fillStyle = '#fff';
       } else {
-        ctx.fillStyle = '#343434';
+        ctx.fillStyle = '#242424';
       }
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
@@ -161,7 +161,7 @@
             ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
             ctx.closePath()
             ctx.strokeStyle = "#333"
-            ctx.fillStyle = "#666"
+            ctx.fillStyle = "#444"
             ctx.fill()
             ctx.stroke()
             ctx.restore()
@@ -231,6 +231,7 @@
         function drawThreadLine(startPoint, endPoint, type, mode) {
           const outerWidth = scale(thread.radius) * 2
           const innerWidth = outerWidth - 4
+          const outerColor = "#b53533"
           if (startPoint.pinId === endPoint.pinId) {
             ctx.save()
             ctx.beginPath()
@@ -250,7 +251,7 @@
             ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
             ctx.lineCap = "round"
             if (type === "OUTER") {
-              ctx.strokeStyle = "#333"
+              ctx.strokeStyle = outerColor
               ctx.lineWidth = outerWidth
             }
             if (type === "INNER") {
@@ -267,7 +268,7 @@
             lineTo(endPoint)
             ctx.lineCap = "round"
             if (type === "OUTER") {
-              ctx.strokeStyle = "#333"
+              ctx.strokeStyle = outerColor
               ctx.lineWidth = outerWidth
             }
             if (type === "INNER") {
@@ -477,6 +478,55 @@
       return pins
     }
 
+    function generatePinsGrid(gap, jitter = gap / 10) {
+      const pins = []
+      const bounds = state.bounds;
+      const width = Math.abs(bounds.lowerRightCorner.x - bounds.upperLeftCorner.x)
+      const height = Math.abs(bounds.lowerRightCorner.y - bounds.upperLeftCorner.y)
+      const pinsX = Math.floor(width / 2 / gap)
+      const pinsY = Math.floor(height / 2 / gap)
+      for (let xc = -pinsX; xc <= pinsX; xc += 1) {
+        for (let yc = -pinsY; yc <= pinsY; yc += 1) {
+          const x = xc * gap + jitter * (1 - 2 * Math.random())
+          const y = yc * gap + jitter * (1 - 2 * Math.random())
+          const pin = {
+            id: pins.length + 1,
+            center: { x, y },
+            innerRadius: pinInnerRadius, outerRadius: pinOuterRadius,
+            direction: Math.random() > 0.5 ? CLOCKWISE : COUNTERCLOCKWISE
+          };
+          pins.push(pin)
+        }
+      }
+      return pins
+    }
+
+    function generatePinsSquare(gap, jitter = gap / 10) {
+      const pins = []
+      const bounds = state.bounds;
+      const width = Math.abs(bounds.lowerRightCorner.x - bounds.upperLeftCorner.x)
+      const height = Math.abs(bounds.lowerRightCorner.y - bounds.upperLeftCorner.y)
+      const pinsX = Math.floor(width / 2 / gap)
+      const pinsY = Math.floor(height / 2 / gap)
+      for (let xc = -pinsX; xc <= pinsX; xc += 1) {
+        for (let yc = -pinsY; yc <= pinsY; yc += 1) {
+          const x = xc * gap + jitter * (1 - 2 * Math.random())
+          const y = yc * gap + jitter * (1 - 2 * Math.random())
+          const pin = {
+            id: pins.length + 1,
+            center: { x, y },
+            innerRadius: pinInnerRadius, outerRadius: pinOuterRadius,
+            direction: Math.random() > 0.5 ? CLOCKWISE : COUNTERCLOCKWISE
+          };
+          if (Math.abs(xc) === pinsX || Math.abs(yc) === pinsY) {
+            pins.push(pin)
+          }
+        }
+      }
+      return pins
+    }
+
+
     function generateThreadRandom(pins, length) {
       const pinIds = pins.map(pin => [pin.id, Math.random()]).sort((a, b) => a[1] - b[1]).map(a => a[0]).slice(0, length)
       return {
@@ -490,21 +540,63 @@
       }
     }
 
-    function generateThreadClosest(pins, length, color) {
+    function generateThreadClosest(pins, length, color, existingThreads) {
       const pinIds = []
+      const takenPinIds = existingThreads.map(thread => thread.pinIds).reduce((acc, ids) => acc.concat(ids), [])
       const distanceWeight = 0.75
       for (let i = 0; i < length; i += 1) {
         if (i === 0) {
-          pinIds.push(pins[Math.floor(Math.random() * pins.length)].id)
+          const availableIds = pins.map(pin => pin.id).filter(id => !takenPinIds.includes(id))
+          if (availableIds.length > 0) {
+            pinIds.push(availableIds[Math.floor(Math.random() * availableIds.length)])
+          }
         } else {
           const previousPin = findPin(pins, pinIds[i - 1]);
           const available = pins
             .filter(pin => !pinIds.includes(pin.id))
+            .filter(pin => !takenPinIds.includes(pin.id))
             .map(pin => [pin, distance2d([previousPin.center.x, previousPin.center.y], [pin.center.x, pin.center.y])])
             .map(([pin, distance]) => [pin, distanceWeight * distance + (1 - distanceWeight) * Math.random()])
             .sort((a, b) => a[1] - b[1])
-          const chosenPin = available[0][0]
-          pinIds.push(chosenPin.id)
+          if (available.length > 0) {
+            const chosenPin = available[0][0]
+            pinIds.push(chosenPin.id)
+          }
+        }
+      }
+      return {
+        pinIds: pinIds,
+        radius: threadRadius,
+        slack: {
+          start: 0.25,
+          end: 0.5
+        },
+        color: color
+      }
+    }
+
+    function generateThreadFurthest(pins, length, color, existingThreads) {
+      const pinIds = []
+      const takenPinIds = existingThreads.map(thread => thread.pinIds).reduce((acc, ids) => acc.concat(ids), [])
+      const distanceWeight = 0.75
+      for (let i = 0; i < length; i += 1) {
+        if (i === 0) {
+          const availableIds = pins.map(pin => pin.id).filter(id => !takenPinIds.includes(id))
+          if (availableIds.length > 0) {
+            pinIds.push(availableIds[Math.floor(Math.random() * availableIds.length)])
+          }
+        } else {
+          const previousPin = findPin(pins, pinIds[i - 1]);
+          const available = pins
+            .filter(pin => !pinIds.includes(pin.id))
+            .filter(pin => !takenPinIds.includes(pin.id))
+            .map(pin => [pin, distance2d([previousPin.center.x, previousPin.center.y], [pin.center.x, pin.center.y])])
+            .map(([pin, distance]) => [pin, distanceWeight * distance + (1 - distanceWeight) * Math.random()])
+            .sort((a, b) => b[1] - a[1])
+          if (available.length > 0) {
+            const chosenPin = available[0][0]
+            pinIds.push(chosenPin.id)
+          }
         }
       }
       return {
@@ -572,15 +664,24 @@
       noise.seed(Math.random());
       state.pins = []
       state.threads = []
-      // state.pins = generatePinsInCircle(10, 2)
-      state.pins = generatePinsRandom(200, 0.2)
+      state.pins = [
+        ...generatePinsInCircle(100, 2),
+      ]
+      // state.pins = generatePinsRandom(200, 0.2)
+      state.pins = generatePinsGrid(0.15)
+      // state.pins = generatePinsSquare(0.15)
 
+      let threads = []
+      threads = threads.concat(generateThreadFurthest(state.pins, 700, threadColor, threads))
+      /*
       state.threads = [
         // generateThreadClosest(state.pins, 8, threadColor),
-        //generateThreadClosest(state.pins, 7, threadColor),
+        // generateThreadClosest(state.pins, 7, threadColor),
         generateThreadClosest(state.pins, 22, threadColor),
-        //generateThreadCluster(state.pins, 10, threadColor)
+        generateThreadCluster(state.pins, 10, threadColor)
       ]
+      */
+      state.threads = threads
       draw();
     }
     restart();
