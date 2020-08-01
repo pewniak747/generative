@@ -17,16 +17,17 @@
   <script>
     // TODO:
     // [x] always wrap around a pin if angle is small
-    // [ ] draw thread hanging more loosely
+    // [x] draw thread hanging more loosely
     // [ ] always wrap around a pin if thread is close enough
 
     const canvas = document.querySelector('canvas');
     const ctx = canvas.getContext('2d');
     const unitLength = 200;
     const pinInnerRadius = 0.02
-    const pinOuterRadius = 0.03
+    const pinOuterRadius = 0.025
     const threadColor = "#dd3633";
-    const threadRadius = 0.02
+    const threadRadius = 0.01
+    const threadOutlinePx = 2
     let DEBUG = false;
 
     const CLOCKWISE = "CLOCKWISE"
@@ -38,7 +39,7 @@
       maxPins: 10,
       bounds: {
         upperLeftCorner: { x: -5, y: 5 },
-        lowerRightCorner: { x: 5, y: -5 }
+        lowerRightCorner: { x: 5, y: -3 }
       }
     };
 
@@ -155,17 +156,22 @@
         }
 
         if (!DEBUG) {
-          if (state.threads.some(thread => thread.pinIds.includes(pin.id))) {
-            ctx.save()
-            ctx.beginPath()
-            ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
-            ctx.closePath()
+          const wrapped = state.threads.some(thread => thread.pinIds.includes(pin.id))
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(x(pin.center.x), y(pin.center.y), scale(pin.outerRadius), 0, 2 * Math.PI)
+          ctx.closePath()
+          if (wrapped) {
             ctx.strokeStyle = "#333"
             ctx.fillStyle = "#444"
-            ctx.fill()
-            ctx.stroke()
-            ctx.restore()
+          } else {
+            ctx.fillStyle = '#1f1f1f';
+            ctx.strokeStyle = '#141414';
+            ctx.globalAlpha = 0 // Hide non-wrapped pins
           }
+          ctx.fill()
+          ctx.stroke()
+          ctx.restore()
         }
 
         ctx.restore();
@@ -181,6 +187,9 @@
         }
         function lineTo(point) {
           ctx.lineTo(x(point.x), y(point.y));
+        }
+        function quadraticCurveTo(control, point) {
+          ctx.quadraticCurveTo(x(control.x), y(control.y), x(point.x), y(point.y));
         }
 
         const points = calculateThreadPoints(thread, state.pins)
@@ -201,6 +210,11 @@
                 const radius = pin.innerRadius + thread.radius
                 const counterclockwise = pin.direction === COUNTERCLOCKWISE
                 ctx.arc(x(pin.center.x), y(pin.center.y), scale(radius), -1 * (startAngle + Math.PI), -1 * (endAngle + Math.PI), counterclockwise)
+              } else if (startPoint.pinId !== null && endPoint.pinId !== null) {
+                const startPin = findPin(state.pins, startPoint.pinId)
+                const endPin = findPin(state.pins, endPoint.pinId)
+                const control = calculateHangControlPoint(thread, startPin, endPin)
+                quadraticCurveTo(control, endPoint)
               } else {
                 lineTo(endPoint)
               }
@@ -230,7 +244,7 @@
 
         function drawThreadLine(startPoint, endPoint, type, mode) {
           const outerWidth = scale(thread.radius) * 2
-          const innerWidth = outerWidth - 4
+          const innerWidth = outerWidth - (threadOutlinePx * 2)
           const outerColor = "#b53533"
           if (startPoint.pinId === endPoint.pinId) {
             ctx.save()
@@ -264,8 +278,16 @@
           } else {
             ctx.save()
             ctx.beginPath()
-            moveTo(startPoint)
-            lineTo(endPoint)
+            if (startPoint.pinId !== null && endPoint.pinId !== null) {
+              const startPin = findPin(state.pins, startPoint.pinId)
+              const endPin = findPin(state.pins, endPoint.pinId)
+              const control = calculateHangControlPoint(thread, startPin, endPin)
+              moveTo(startPoint)
+              quadraticCurveTo(control, endPoint)
+            } else {
+              moveTo(startPoint)
+              lineTo(endPoint)
+            }
             ctx.lineCap = "round"
             if (type === "OUTER") {
               ctx.strokeStyle = outerColor
@@ -295,7 +317,27 @@
                 }
               }
             }
-            // debugger
+          })
+        }
+
+        if (DEBUG) {
+          points.forEach((point, idx) => {
+            if (idx > 0) {
+              const startPoint = points[idx - 1]
+              const endPoint = point
+              if (startPoint.pinId === null) return
+              if (endPoint.pinId === null) return
+              if (startPoint.pinId === endPoint.pinId) return
+              const startPin = findPin(state.pins, startPoint.pinId)
+              const endPin = findPin(state.pins, endPoint.pinId)
+              const hangControlPoint = calculateHangControlPoint(thread, startPin, endPin)
+              ctx.save()
+              ctx.beginPath()
+              ctx.arc(x(hangControlPoint.x), y(hangControlPoint.y), 10, 0, 2 * Math.PI)
+              ctx.fillStyle = "black"
+              ctx.fill()
+              ctx.restore()
+            }
           })
         }
 
@@ -348,9 +390,13 @@
 
       let intermediatePoints = []
       for (let i = 0; i < thread.pinIds.length - 1; i += 1) {
+        const start = findPin(pins, thread.pinIds[i])
+        const end = findPin(pins, thread.pinIds[i + 1])
+        const hangPoint = calculateHangControlPoint(thread, start, end)
         intermediatePoints = [
           ...intermediatePoints,
-          ...calculateThreadPointsBetweenPins(thread, findPin(pins, thread.pinIds[i]), findPin(pins, thread.pinIds[i + 1]))
+          // ...calculateThreadPointsBetweenPins(thread, start, end)
+          ...calculateThreadPointsBetweenPinsWithHang(thread, start, end, hangPoint)
         ]
       }
 
@@ -424,14 +470,68 @@
       }
     }
 
-    function generatePinsInCircle(numPins, radius) {
+    function calculateThreadPointsBetweenPinsWithHang(thread, startPin, endPin, hangPoint) {
+      function calculatePoint(start, end, r0, r1) {
+        const a = start.x
+        const b = start.y
+        const c = end.x
+        const d = end.y
+
+        const xp = (c * r0 + a * r1) / (r0 + r1)
+        const yp = (d * r0 + b * r1) / (r0 + r1)
+
+        const x1 = (Math.pow(r0, 2) * (xp - a) + r0 * (yp - b) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + a
+        const x2 = (Math.pow(r0, 2) * (xp - a) - r0 * (yp - b) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + a
+        const y1 = (Math.pow(r0, 2) * (yp - b) - r0 * (xp - a) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + b
+        const y2 = (Math.pow(r0, 2) * (yp - b) + r0 * (xp - a) * Math.sqrt(Math.pow(xp - a, 2) + Math.pow(yp - b, 2) - Math.pow(r0, 2))) / (Math.pow(xp - a, 2) + Math.pow(yp - b, 2)) + b
+        const x3 = (Math.pow(r1, 2) * (xp - c) + r1 * (yp - d) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + c
+        const y3 = (Math.pow(r1, 2) * (yp - d) - r1 * (xp - c) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + d
+        const x4 = (Math.pow(r1, 2) * (xp - c) - r1 * (yp - d) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + c
+        const y4 = (Math.pow(r1, 2) * (yp - d) + r1 * (xp - c) * Math.sqrt(Math.pow(xp - c, 2) + Math.pow(yp - d, 2) - Math.pow(r1, 2))) / (Math.pow(xp - c, 2) + Math.pow(yp - d, 2)) + d
+        return [
+          { x: x2, y: y2 },
+          { x: x4, y: y4 },
+          { x: x1, y: y1 },
+          { x: x3, y: y3 }
+        ]
+      }
+
+      const startTangents = calculatePoint(startPin.center, hangPoint, startPin.innerRadius + thread.radius, 0.0001)
+      const endTangents = calculatePoint(hangPoint, endPin.center, 0.0001, endPin.innerRadius + thread.radius)
+
+      const startTangent = startPin.direction === CLOCKWISE ? startTangents[0] : startTangents[2]
+      const endTangent = endPin.direction === CLOCKWISE ? endTangents[3] : endTangents[1]
+
+      return [
+        { ...startTangent, pinId: startPin.id },
+        { ...endTangent, pinId: endPin.id }
+      ]
+    }
+
+    function calculateHangControlPoint(thread, startPin, endPin) {
+      const maxHangAmount = 1
+      const [startPoint, endPoint] = calculateThreadPointsBetweenPins(thread, startPin, endPin)
+      const angle = Math.abs(Math.atan2(startPoint.y - endPoint.y, startPoint.x - endPoint.x))
+      const amount = (angle > (Math.PI / 2) ? angle - (Math.PI / 2) : (Math.PI / 2) - angle) / (Math.PI / 2)
+      const hang = maxHangAmount * amount
+      // console.log("AMOUNT", startPin.id, endPin.id, amount, hang);
+      const hangX = (startPoint.x + endPoint.x) / 2
+      const hangY = (startPoint.y + endPoint.y) / 2 - hang
+      return { x: hangX, y: hangY }
+    }
+
+    function generatePinsInCircle(numPins, radius, jitter = 0.1) {
       const pins = []
       for (let i = 0; i < numPins; i += 1) {
         const angle = 2 * Math.PI * (i / numPins)
+        const xc = radius * Math.sin(angle)
+        const yc = radius * Math.cos(angle)
+        const x = xc + jitter * (1 - 2 * Math.random())
+        const y = yc + jitter * (1 - 2 * Math.random())
         pins.push(
           {
             id: i + 1,
-            center: { x: radius * Math.sin(angle), y: radius * Math.cos(angle) },
+            center: { x, y },
             innerRadius: pinInnerRadius,
             outerRadius: pinOuterRadius,
             direction: Math.random() > 0.5 ? CLOCKWISE : COUNTERCLOCKWISE
@@ -533,8 +633,8 @@
         pinIds: pinIds,
         radius: threadRadius,
         slack: {
-          start: 0.25,
-          end: 0.5
+          start: generateSlack(),
+          end: generateSlack()
         },
         color: threadColor
       }
@@ -544,6 +644,12 @@
       const pinIds = []
       const takenPinIds = existingThreads.map(thread => thread.pinIds).reduce((acc, ids) => acc.concat(ids), [])
       const distanceWeight = 0.75
+      const minDistance = 1
+      function score(distance) {
+        const weightedDistance = minDistance + Math.abs(distance - minDistance)
+        return distanceWeight * weightedDistance + (1 - distanceWeight) * Math.random()
+      }
+
       for (let i = 0; i < length; i += 1) {
         if (i === 0) {
           const availableIds = pins.map(pin => pin.id).filter(id => !takenPinIds.includes(id))
@@ -556,7 +662,7 @@
             .filter(pin => !pinIds.includes(pin.id))
             .filter(pin => !takenPinIds.includes(pin.id))
             .map(pin => [pin, distance2d([previousPin.center.x, previousPin.center.y], [pin.center.x, pin.center.y])])
-            .map(([pin, distance]) => [pin, distanceWeight * distance + (1 - distanceWeight) * Math.random()])
+            .map(([pin, distance]) => [pin, score(distance)])
             .sort((a, b) => a[1] - b[1])
           if (available.length > 0) {
             const chosenPin = available[0][0]
@@ -568,8 +674,8 @@
         pinIds: pinIds,
         radius: threadRadius,
         slack: {
-          start: 0.25,
-          end: 0.5
+          start: generateSlack(),
+          end: generateSlack()
         },
         color: color
       }
@@ -603,8 +709,8 @@
         pinIds: pinIds,
         radius: threadRadius,
         slack: {
-          start: 0.25,
-          end: 0.5
+          start: generateSlack(),
+          end: generateSlack()
         },
         color: color
       }
@@ -638,11 +744,15 @@
         pinIds: pinIds,
         radius: threadRadius,
         slack: {
-          start: 0.25,
-          end: 0.5
+          start: generateSlack(),
+          end: generateSlack()
         },
         color: color
       }
+    }
+
+    function generateSlack(min = 0.1, max = 0.5) {
+      return min + (max - min) * Math.random()
     }
 
     function distance2d([x1, y1], [x2, y2]) {
@@ -664,15 +774,14 @@
       noise.seed(Math.random());
       state.pins = []
       state.threads = []
-      state.pins = [
-        ...generatePinsInCircle(100, 2),
-      ]
-      // state.pins = generatePinsRandom(200, 0.2)
-      state.pins = generatePinsGrid(0.15)
-      // state.pins = generatePinsSquare(0.15)
+      state.pins = generatePinsInCircle(50, 2)
+      // state.pins = generatePinsRandom(200, 0.3)
+      // state.pins = generatePinsGrid(0.5, 0.1)
+      // state.pins = generatePinsSquare(0.5)
 
       let threads = []
-      threads = threads.concat(generateThreadFurthest(state.pins, 700, threadColor, threads))
+      // threads = threads.concat(generateThreadCluster(state.pins, 20, threadColor, threads))
+      threads = threads.concat(generateThreadFurthest(state.pins, 200, threadColor, threads))
       /*
       state.threads = [
         // generateThreadClosest(state.pins, 8, threadColor),
