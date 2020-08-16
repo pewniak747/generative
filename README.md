@@ -10,6 +10,10 @@ Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
 
 [https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)
 
+#### yarn
+
+[https://pewniak747.github.io/generative/yarn](https://pewniak747.github.io/generative/yarn)
+
 #### ellipse
 
 [https://pewniak747.github.io/generative/ellipse](https://pewniak747.github.io/generative/ellipse)
