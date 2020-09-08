@@ -1,0 +1,167 @@
+<html>
+
+<head>
+  <title>Confetti</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <script src="perlin.js"></script>
+  <script src="halton.js"></script>
+  <script src="https://d3js.org/d3-color.v1.min.js"></script>
+  <script src="https://d3js.org/d3-format.v1.min.js"></script>
+  <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+  <script src="https://d3js.org/d3-scale.v3.min.js"></script>
+  <script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 100;
+    let DEBUG = false;
+
+    const state = {
+      confetti: [],
+      centerHue: 0
+    };
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
+      return value;
+    }
+    function invertY(yValue) {
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+    }
+    function handleCanvasClick(event) {
+      restart();
+    }
+
+    function generateConfetti() {
+      let confetti = []
+      const halton2 = halton.base(2)
+      const halton3 = halton.base(3)
+      const confettiCount = 50000
+      const extent = 8
+      const haltonOffset = Math.floor(10000 * Math.random())
+      for (let i = 0; i < confettiCount; i += 1) {
+        const centerX = extent * 2 * (halton2(i + haltonOffset) - 0.5)
+        const centerY = extent * (halton3(i + haltonOffset) - 0.5)
+        const c = {
+          center: { x: centerX, y: centerY },
+        }
+        confetti.push(c)
+      }
+
+      return confetti;
+    }
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = `hsl(${state.centerHue},60%,70%)`;
+      }
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      state.confetti.forEach(c => { drawConfetti(c) })
+    }
+
+    function drawConfetti(c, pass = "FOREGROUND") {
+      const center = c.center
+      const radius = 0.05 + 0.01 * Math.random()
+      const lowFqNoise = noise.perlin2(center.x / 50, center.y / 50)
+      const highFqNoise = noise.perlin2(center.x / 2, center.y / 2)
+      const randomNoise = lowFqNoise * 0.8 + highFqNoise * 0.2
+      let hue = (state.centerHue + (randomNoise + Math.random() * 0.1) * 360) % 360
+      const invertHue = Math.random() < 0.3
+      const invertHueDirection = Math.sign(Math.random() - 0.5)
+      hue = invertHue ? ((hue + invertHueDirection * 150) % 360) : hue
+      const color = `hsl(${hue},50%,65%)`;
+      const strokeColor = `hsl(${hue},50%,63%)`;
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(center.x), y(center.y), scale(radius), 0, 2 * Math.PI)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (!DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(center.x), y(center.y), scale(radius), 0, 2 * Math.PI)
+        /*
+        ctx.moveTo(x(center.x - radius / 2), y(center.y - radius / 2))
+        ctx.lineTo(x(center.x + radius / 2), y(center.y - radius / 2))
+        ctx.lineTo(x(center.x + radius / 2), y(center.y + radius / 2))
+        ctx.lineTo(x(center.x - radius / 2), y(center.y + radius / 2))
+        ctx.closePath()
+        */
+        ctx.fillStyle = color
+        ctx.strokeStyle = strokeColor
+        ctx.fill()
+        ctx.lineWidth = 2
+        ctx.stroke()
+        ctx.restore()
+      }
+
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+
+    function restart() {
+      noise.seed(Math.random());
+      state.confetti = generateConfetti()
+      state.centerHue = 360 * Math.random()
+      draw();
+    }
+    restart();
+  </script>
+</body>
+
+</html>
