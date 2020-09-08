@@ -1,0 +1,284 @@
+<html>
+
+<head>
+  <title>Fiber</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body {
+      margin: 0;
+    }
+  </style>
+  <script src="https://d3js.org/d3-color.v1.min.js"></script>
+  <script src="https://d3js.org/d3-format.v1.min.js"></script>
+  <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+  <script src="https://d3js.org/d3-scale.v3.min.js"></script>
+  <script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 100;
+    let DEBUG = false;
+
+    const state = {
+      fibers: [],
+    };
+    const backgroundColor = '#0f1533';
+    // const lightColor = '#e3e9ff';
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
+      return value;
+    }
+    function invertY(yValue) {
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+    }
+    function handleCanvasClick(event) {
+      restart();
+    }
+
+    function generateFibers() {
+      let fibers = []
+      const fibersCount = 60
+      const bendExtent = Math.min(0.5, canvas.width / devicePixelRatio * 0.0005);
+      const inclineAngles = Array(fibersCount).fill(null)
+        .map(() => 0.01 * (Math.random() - 0.5) * Math.PI)
+        .sort().reverse()
+      const bendAngles = Array(fibersCount).fill(null)
+        .map((_, i) => Math.sign(inclineAngles[i]) * bendExtent * Math.random() * Math.PI)
+      const angles = inclineAngles.map((inclineAngle, i) => [inclineAngle, bendAngles[i]]).sort((a1, a2) => (a1[0] + a1[1]) - (a2[0] + a2[1])).reverse()
+      const anchorXs = Array(fibersCount).fill(null)
+        .map(() => 0.5 * (Math.random() - 0.5))
+        .sort((a, b) => a - b)
+
+      for (let i = 0; i < fibersCount; i += 1) {
+        const anchorX = anchorXs[i]
+        const anchorY = -2.5 + 0.01 * (Math.random() - 0.5)
+        const inclineAngle = angles[i][0]
+        const bendAngle = angles[i][1]
+        const length = 4 + 0.9 * Math.random()
+        const fiber = {
+          anchor: { x: anchorX, y: anchorY },
+          inclineAngle,
+          bendAngle,
+          length
+        }
+        fibers.push(fiber)
+      }
+
+      return fibers;
+    }
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = backgroundColor;
+      }
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      state.fibers.forEach(f => { drawFiber(f, "BACKGROUND") })
+      state.fibers.forEach(f => { drawFiber(f, "FOREGROUND") })
+      if (!DEBUG) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(x(-10), y(-4), scale(20), scale(10));
+      }
+    }
+
+    function drawFiber(fiber, pass = "FOREGROUND") {
+      const startPoint = fiber.anchor
+      const controlFraction = 0.5
+      const extrapolationPoint = {
+        x: startPoint.x + Math.cos(fiber.inclineAngle + Math.PI / 2) * fiber.length,
+        y: startPoint.y + Math.sin(fiber.inclineAngle + Math.PI / 2) * fiber.length
+      }
+      const quadraticControlPoint = {
+        x: startPoint.x + controlFraction * (extrapolationPoint.x - startPoint.x),
+        y: startPoint.y + controlFraction * (extrapolationPoint.y - startPoint.y)
+      }
+      const endPoint = {
+        x: quadraticControlPoint.x + Math.cos(fiber.inclineAngle + fiber.bendAngle + Math.PI / 2) * (1 - controlFraction) * fiber.length,
+        y: quadraticControlPoint.y + Math.sin(fiber.inclineAngle + fiber.bendAngle + Math.PI / 2) * (1 - controlFraction) * fiber.length
+      }
+      const lowestExtrapolationPoint = {
+        x: startPoint.x - Math.cos(fiber.inclineAngle + Math.PI / 2) * fiber.length,
+        y: startPoint.y - Math.sin(fiber.inclineAngle + Math.PI / 2) * fiber.length
+      }
+      const lowerControlPoint = {
+        x: startPoint.x + controlFraction * (lowestExtrapolationPoint.x - startPoint.x),
+        y: startPoint.y + controlFraction * (lowestExtrapolationPoint.y - startPoint.y)
+      }
+      const lowestPoint = {
+        x: lowerControlPoint.x + Math.cos(fiber.inclineAngle + fiber.bendAngle + Math.PI / 2) * (1 - controlFraction) * fiber.length,
+        y: lowerControlPoint.y - Math.sin(fiber.inclineAngle + fiber.bendAngle + Math.PI / 2) * (1 - controlFraction) * fiber.length
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(startPoint.x), y(startPoint.y), 3, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(endPoint.x), y(endPoint.y), 3, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(quadraticControlPoint.x), y(quadraticControlPoint.y), 3, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.strokeStyle = 'red'
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(lowestPoint.x), y(lowestPoint.y), 3, 0, 2 * Math.PI)
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(lowerControlPoint.x), y(lowerControlPoint.y), 3, 0, 2 * Math.PI)
+        ctx.strokeStyle = 'red'
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x(lowestPoint.x), y(lowestPoint.y))
+        ctx.quadraticCurveTo(x(lowerControlPoint.x), y(lowerControlPoint.y), x(startPoint.x), y(startPoint.y))
+        // ctx.lineTo(x(startPoint.x), y(startPoint.y))
+        ctx.quadraticCurveTo(x(quadraticControlPoint.x), y(quadraticControlPoint.y), x(endPoint.x), y(endPoint.y))
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      const intensity = 0.3 + Math.random() * 0.7
+      const hue = 227 + 20 * (Math.random() - 0.5)
+      const color = `hsl(${hue % 255},100%,90%)`;
+      const lightColorScale = d3.scaleLinear().domain([0, 1]).range([backgroundColor, color])
+      const fiberColor = lightColorScale(intensity * 0.7)
+      const fiberGlowColor = lightColorScale(intensity * 0.1)
+      const tipColor = lightColorScale(intensity * 0.99)
+      const tipGlowColor = lightColorScale(intensity * 0.5)
+      const tipGlowSkew = 0.02 * Math.abs(endPoint.x)
+      const tipGlowPoint = {
+        x: endPoint.x + tipGlowSkew * Math.sign(endPoint.x) * Math.random(),
+        y: endPoint.y + tipGlowSkew * (Math.random() - 0.5)
+      }
+
+      if (!DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x(lowestPoint.x), y(lowestPoint.y))
+        ctx.quadraticCurveTo(x(lowerControlPoint.x), y(lowerControlPoint.y), x(startPoint.x), y(startPoint.y))
+        ctx.quadraticCurveTo(x(quadraticControlPoint.x), y(quadraticControlPoint.y), x(endPoint.x), y(endPoint.y))
+
+        if (pass == "BACKGROUND") {
+          ctx.lineWidth = 20
+          ctx.lineCap = 'round'
+          ctx.strokeStyle = fiberGlowColor
+          ctx.globalAlpha = 0.25
+          ctx.stroke()
+        }
+
+        ctx.lineWidth = 3
+        ctx.strokeStyle = fiberColor
+        // ctx.globalAlpha = 0.4 * intensity
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      if (!DEBUG && pass == "BACKGROUND") {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(tipGlowPoint.x), y(tipGlowPoint.y), 15, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.fillStyle = tipGlowColor
+        ctx.globalAlpha = 0.15
+        ctx.fill()
+        ctx.restore()
+      }
+
+      if (!DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(endPoint.x), y(endPoint.y), 3, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.fillStyle = tipColor
+        // ctx.globalAlpha = 0.7 * intensity
+        ctx.fill()
+        ctx.restore()
+      }
+
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+
+    function restart() {
+      state.fibers = generateFibers()
+      draw();
+    }
+    restart();
+  </script>
+</body>
+
+</html>
