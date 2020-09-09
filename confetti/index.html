@@ -95,7 +95,7 @@
       if (DEBUG) {
         ctx.fillStyle = '#fff';
       } else {
-        ctx.fillStyle = `hsl(${state.centerHue},60%,70%)`;
+        ctx.fillStyle = `hsl(${state.centerHue + 180},30%,20%)`;
       }
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
@@ -110,11 +110,14 @@
       const highFqNoise = noise.perlin2(center.x / 2, center.y / 2)
       const randomNoise = lowFqNoise * 0.8 + highFqNoise * 0.2
       let hue = (state.centerHue + (randomNoise + Math.random() * 0.1) * 360) % 360
-      const invertHue = Math.random() < 0.3
+      const invertHue = Math.random() < 0.8
       const invertHueDirection = Math.sign(Math.random() - 0.5)
       hue = invertHue ? ((hue + invertHueDirection * 150) % 360) : hue
       const color = `hsl(${hue},50%,65%)`;
       const strokeColor = `hsl(${hue},50%,63%)`;
+
+      const distance = distance2d([center.x, center.y], [0, 0])
+      if (distance > Math.random() * 4) return
 
       if (DEBUG) {
         ctx.save()

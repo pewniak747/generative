@@ -26,6 +26,12 @@ Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
   <img src="./screens/yarn.png" />
 </a>
 
+#### confetti
+
+<a href="https://pewniak747.github.io/generative/confetti">
+  <img src="./screens/confetti.png" />
+</a>
+
 #### ellipse
 
 <a href="https://pewniak747.github.io/generative/ellipse">
