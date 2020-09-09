@@ -6,6 +6,10 @@ Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
 
 [https://pewniak747.github.io/generative/shards](https://pewniak747.github.io/generative/shards)
 
+#### montenoi
+
+[https://pewniak747.github.io/generative/montenoi](https://pewniak747.github.io/generative/montenoi)
+
 #### ribbons
 
 [https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)

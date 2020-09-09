@@ -1,0 +1,353 @@
+<html>
+
+<head>
+  <title>Montenoi</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body>
+  <canvas>
+  </canvas>
+  <style>
+    body,
+    html {
+      margin: 0;
+      background: '#111';
+    }
+  </style>
+  <script src="perlin.js"></script>
+  <script src="halton.js"></script>
+  <script src="d3-delaunay.min.js"></script>
+  <script src="offset.min.js"></script>
+  <script src="martinez.min.js"></script>
+  <script>
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const unitLength = 100;
+    let DEBUG = false;
+
+    const state = {
+      cells: [],
+    };
+
+    // Positioning
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    function scale(value) {
+      return value * unitLength * devicePixelRatio;
+    }
+    function x(value) {
+      return canvas.width / 2 + scale(value);
+    }
+    function y(value) {
+      return canvas.height / 2 - scale(value);
+    }
+    function invertX(xValue) {
+      const value = (xValue - canvas.width / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(xValue * devicePixelRatio - x(value)) < 0.001, "invertX failed");
+      return value;
+    }
+    function invertY(yValue) {
+      const value = -(yValue - canvas.height / devicePixelRatio / 2) / unitLength;
+      console.assert(Math.abs(yValue * devicePixelRatio - y(value)) < 0.001, "invertY failed");
+      return value;
+    }
+
+    // Event handlers
+    function adjustCanvasSize() {
+      const width = document.body.clientWidth;
+      const height = document.body.clientHeight;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      canvas.width = width * devicePixelRatio;
+      canvas.height = height * devicePixelRatio;
+    }
+    function handleCanvasClick(event) {
+      restart();
+    }
+
+    function generateCells() {
+      const halton2 = halton.base(2)
+      const halton3 = halton.base(3)
+      const cellsCount = 200
+      const extent = clamp(4, 4.5, Math.min(Math.abs(invertX(canvas.width)), Math.abs(invertY(canvas.height))) - 0.5)
+      const haltonOffset = Math.floor(10000 * Math.random())
+      let cellCenters = []
+      for (let i = 0; i < cellsCount; i += 1) {
+        const centerX = extent * (halton2(i + haltonOffset) - 0.5) * 2
+        const centerY = extent * (halton3(i + haltonOffset) - 0.5) * 2
+        if (distance2d([centerX, centerY], [0, 0]) < extent) {
+          cellCenters.push({ x: centerX, y: centerY })
+        }
+      }
+      const delaunay = d3.Delaunay.from(cellCenters.map(h => ([h.x, h.y])))
+      const voronoi = delaunay.voronoi([-extent, -extent, extent, extent])
+      const cells = cellCenters.map((center, idx) => {
+        const value = (noise.perlin2(center.x / 2, center.y / 2) + 1) * 0.5
+        const rawPolygon = voronoi.cellPolygon(idx);
+        const neighbors = Array.from(voronoi.neighbors(idx))
+        const bounds = offsetPolygon(rawPolygon, 0.3)
+        const pointBounds = offsetPolygon(rawPolygon, 0.25, false)
+        const extentX = Math.max(...rawPolygon.map(([x, _]) => Math.abs(x - center.x)))
+        const extentY = Math.max(...rawPolygon.map(([_, y]) => Math.abs(y - center.y)))
+        return {
+          center: center,
+          value: value,
+          rawBounds: rawPolygon,
+          bounds: bounds,
+          pointBounds: pointBounds,
+          neighbors: neighbors,
+          points: [],
+          extentX, extentY
+        }
+      }).filter(cell => {
+        return cell.rawBounds.every(([x, y]) => x !== extent && x !== -extent && y !== extent && y !== -extent)
+      }).filter(cell => {
+        return cell.bounds.length > 0
+      })
+
+      cells.forEach((cell) => {
+        const pointsCount = 30
+        const pointHaltonOffset = haltonOffset + Math.floor(10000 * Math.random())
+        const extent = Math.max(cell.extentX, cell.extentY)
+        let i;
+        for (i = 0; cell.points.length < pointsCount && i < 1000;) {
+          const centerX = cell.center.x + extent * (halton2(i + pointHaltonOffset) - 0.5) * 2
+          const centerY = cell.center.y + extent * (halton3(i + pointHaltonOffset) - 0.5) * 2
+          console.log("Assigning points...")
+
+          if (pointInsidePolygon([centerX, centerY], cell.pointBounds)) {
+            cell.points.push({ x: centerX, y: centerY })
+          }
+          i += 1
+        }
+      })
+
+
+      return cells;
+    }
+
+    function offsetPolygon(polygon, extent, shouldExplode = true) {
+      try {
+        console.log("Offsetting polygons...")
+        const eroded = (new Offset()).data(polygon).offset(-0.3 * extent);
+        if (shouldExplode) {
+          const exploded = (new Offset()).data(eroded[0]).arcSegments(10).offset(0.1 * extent);
+          return exploded[0]
+        } else {
+          return eroded[0]
+        }
+      } catch {
+        return []
+      }
+    }
+
+    // https://stackoverflow.com/questions/22521982/check-if-point-is-inside-a-polygon
+    function pointInsidePolygon(point, vs) {
+      // ray-casting algorithm based on
+      // https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html/pnpoly.html
+
+      var x = point[0], y = point[1];
+
+      var inside = false;
+      for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        var xi = vs[i][0], yi = vs[i][1];
+        var xj = vs[j][0], yj = vs[j][1];
+
+        var intersect = ((yi > y) != (yj > y))
+          && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+
+      return inside;
+    };
+
+    // Drawing
+    function draw() {
+      if (DEBUG) {
+        console.log("DRAWING", state);
+      }
+      // Clear canvas
+      ctx.save();
+      if (DEBUG) {
+        ctx.fillStyle = '#fff';
+      } else {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const halton2 = halton.base(2)
+        const halton3 = halton.base(3)
+        const extent = clamp(4, 20, Math.max(Math.abs(invertX(canvas.width)), Math.abs(invertY(canvas.height))))
+        const backgroundPointsCount = Math.pow(extent, 2) * 1000
+        const haltonOffset = 0
+        for (let i = 0; i < backgroundPointsCount; i += 1) {
+          const centerX = extent * (halton2(i + haltonOffset) - 0.5) * 2
+          const centerY = extent * (halton3(i + haltonOffset) - 0.5) * 2
+          ctx.fillStyle = '#101010'
+          ctx.fillRect(x(centerX), y(centerY), devicePixelRatio * 2, devicePixelRatio * 2)
+        }
+      }
+      ctx.restore();
+
+      state.cells.forEach(cell => { drawCell(cell) })
+    }
+
+    function drawCell(cell) {
+      console.log("Drawing cells...")
+      // debug: draw cell center
+      if (DEBUG) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x(cell.center.x), y(cell.center.y), scale(cell.value * 0.1), 0, 2 * Math.PI)
+        ctx.closePath();
+        ctx.fill()
+        ctx.restore();
+      }
+
+      // debug: draw cell bounds
+      if (DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x(cell.bounds[0][0]), y(cell.bounds[0][1]))
+        cell.bounds.forEach((point) => {
+          ctx.lineTo(x(point[0]), y(point[1]))
+        })
+        ctx.closePath()
+        ctx.stroke()
+        ctx.restore()
+      }
+
+      const drawnPoints = 5 * Math.pow(10, cell.value)
+      // const invertCell = cell.value * Math.random() > 0.4
+      // const invertCell = (cell.value > 0.5 && Math.random() > 0.5) || Math.random() < 0.1
+      const invertCell = (cell.value > 0.1 && Math.random() > 0.2) || cell.neighbors.length < 6
+      const cellBackgroundColor = invertCell ? '#363636' : '#f9f9f9'
+      const cellPointColor = invertCell ? '#eee' : '#333'
+      const cellBoundColor = invertCell ? '#222' : '#e6e6e6'
+
+      // debug: draw cell points
+      if (DEBUG) {
+        ctx.save()
+        cell.points.slice(0, drawnPoints).forEach((point) => {
+          ctx.beginPath()
+          ctx.arc(x(point.x), y(point.y), 2, 0, 2 * Math.PI)
+          ctx.closePath()
+          ctx.fill()
+        })
+        ctx.restore()
+      }
+
+      // draw cell background
+      if (!DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x(cell.bounds[0][0]), y(cell.bounds[0][1]))
+        cell.bounds.forEach((point) => {
+          ctx.lineTo(x(point[0]), y(point[1]))
+        })
+        ctx.closePath()
+        ctx.fillStyle = cellBackgroundColor
+        ctx.globalAlpha = 0.9
+        if (!invertCell) {
+          ctx.filter = `blur(${5 * devicePixelRatio}px)`
+          ctx.fill()
+          ctx.filter = 'none'
+        }
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // draw cell points
+      if (!DEBUG) {
+        ctx.save()
+
+        if (invertCell) {
+          /*
+          ctx.beginPath()
+          cell.points.slice(0, drawnPoints).forEach((point) => {
+            ctx.lineTo(x(point.x), y(point.y), devicePixelRatio, 0, 2 * Math.PI)
+          })
+          ctx.closePath()
+          ctx.fillStyle = cellPointColor
+          ctx.strokeStyle = cellPointColor
+          ctx.lineWidth = devicePixelRatio / 2
+          ctx.globalAlpha = 0.1
+          ctx.stroke()
+          */
+          const extent = Math.max(cell.extentX, cell.extentY)
+          const drawn = cell.points.slice(0, drawnPoints)
+          const delaunay = d3.Delaunay.from(drawn.map(h => ([h.x, h.y])))
+          const voronoi = delaunay.voronoi([cell.center.x - extent, cell.center.y - extent, cell.center.x + extent, cell.center.y + extent])
+          drawn.forEach((point, idx) => {
+            const rawPolygon = voronoi.cellPolygon(idx)
+            if (!rawPolygon) return
+            const clippedPolygon = martinez.intersection([rawPolygon], [cell.bounds])
+            if (!clippedPolygon || !clippedPolygon[0]) return
+            const polygon = clippedPolygon[0][0]
+            const value = (noise.perlin2(point.x * 5, point.y * 5) + 1) * 0.5
+            ctx.save()
+            ctx.beginPath()
+            ctx.moveTo(x(polygon[0][0]), y(polygon[0][1]))
+            polygon.forEach((point) => {
+              ctx.lineTo(x(point[0]), y(point[1]))
+            })
+            ctx.closePath()
+            ctx.lineCap = 'round'
+            ctx.lineWidth = devicePixelRatio
+            ctx.strokeStyle = cellBoundColor
+            ctx.fillStyle = cellBoundColor
+            ctx.globalAlpha = value
+            ctx.fill()
+            ctx.stroke()
+            ctx.restore()
+          })
+
+
+        }
+
+        ctx.restore()
+      }
+
+      // draw cell bounds
+      if (!DEBUG) {
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(x(cell.bounds[0][0]), y(cell.bounds[0][1]))
+        cell.bounds.forEach((point) => {
+          ctx.lineTo(x(point[0]), y(point[1]))
+        })
+        ctx.closePath()
+        ctx.lineCap = 'round'
+        ctx.lineWidth = devicePixelRatio
+        ctx.strokeStyle = cellBoundColor
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+
+    function distance2d([x1, y1], [x2, y2]) {
+      return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+    }
+
+    function clamp(a, b, value) {
+      const max = Math.max(a, b);
+      const min = Math.min(a, b);
+      if (value < min) return min;
+      if (value > max) return max;
+      return value;
+    }
+
+    adjustCanvasSize();
+    window.addEventListener('resize', () => adjustCanvasSize());
+    window.addEventListener('resize', () => draw());
+    canvas.addEventListener('click', handleCanvasClick);
+
+    function restart() {
+      noise.seed(Math.random());
+      state.cells = generateCells()
+      draw();
+    }
+    restart();
+  </script>
+</body>
+
+</html>
