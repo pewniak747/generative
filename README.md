@@ -4,40 +4,30 @@ Experiments with [generative art](https://en.wikipedia.org/wiki/Generative_art).
 
 #### shards
 
-[https://pewniak747.github.io/generative/shards](https://pewniak747.github.io/generative/shards)
+<a href="https://pewniak747.github.io/generative/shards">
+  <img src="./screens/shards.png" />
+</a>
 
 #### montenoi
 
-[https://pewniak747.github.io/generative/montenoi](https://pewniak747.github.io/generative/montenoi)
+<a href="https://pewniak747.github.io/generative/montenoi">
+  <img src="./screens/montenoi.png" />
+</a>
 
 #### ribbons
 
-[https://pewniak747.github.io/generative/ribbons](https://pewniak747.github.io/generative/ribbons)
+<a href="https://pewniak747.github.io/generative/ribbons">
+  <img src="./screens/ribbons.png" />
+</a>
 
 #### yarn
 
-[https://pewniak747.github.io/generative/yarn](https://pewniak747.github.io/generative/yarn)
+<a href="https://pewniak747.github.io/generative/yarn">
+  <img src="./screens/yarn.png" />
+</a>
 
 #### ellipse
 
-[https://pewniak747.github.io/generative/ellipse](https://pewniak747.github.io/generative/ellipse)
-
-#### curve
-
-[https://pewniak747.github.io/generative/curve](https://pewniak747.github.io/generative/curve)
-
-#### circle wave
-
-[https://pewniak747.github.io/generative/circle-wave](https://pewniak747.github.io/generative/circle-wave)
-
-#### particles
-
-[https://pewniak747.github.io/generative/particles](https://pewniak747.github.io/generative/particles)
-
-#### particles 2
-
-[https://pewniak747.github.io/generative/particles-2](https://pewniak747.github.io/generative/particles-2)
-
-#### squares
-
-[https://pewniak747.github.io/generative/squares](https://pewniak747.github.io/generative/squares)
+<a href="https://pewniak747.github.io/generative/ellipse">
+  <img src="./screens/ellipse.png" />
+</a>
