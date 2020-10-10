@@ -21,7 +21,7 @@ const VARIANTS_TO_EDGES = {
   'RRRRRR': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1]
 }
 
-const span = rangeInclusive(-4, 4)
+const span = rangeInclusive(-3, 3)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)
 
 function rangeInclusive(start, stop) {
@@ -343,6 +343,42 @@ function draw() {
   console.timeEnd('draw')
 }
 
+function drawTransition(startTiles_, endTiles_, done) {
+  const startTiles = startTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
+  const endTiles = endTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
+
+  let firstFrameAt = performance.now()
+  let animationLength = 1000 // ms
+  function drawAnimationFrame(timestamp) {
+    const timeProgress = clamp(0, animationLength, timestamp - firstFrameAt)
+    const progress = timeProgress / animationLength
+
+    if (progress <= 1) {
+      clearCanvas()
+      for (let i = 0; i < endTiles.length; i += 1) {
+        const startTile = startTiles[i]
+        const endTile = endTiles[i]
+        const edgeDiff = (endTile.topEdge - startTile.topEdge) % EDGES
+        const angle = (1 - progress) * edgeDiff / EDGES * 2 * Math.PI
+        drawTile(endTile, -angle)
+      }
+
+      requestAnimationFrame(drawAnimationFrame)
+    } else {
+      done()
+    }
+  }
+
+  requestAnimationFrame(drawAnimationFrame)
+
+  clearCanvas()
+  state.tiles.forEach(tile => {
+    drawTile(tile)
+  })
+
+  done()
+}
+
 function clearCanvas() {
   ctx.save();
   ctx.fillStyle = '#fff';
@@ -415,14 +451,14 @@ function drawDebugPosition(position, color) {
 }
 
 
-function drawTile(tile) {
+function drawTile(tile, rotationAngle = 0) {
   const rotatedEdges = edgesForVariant(tile.variant, tile.topEdge)
   const center = hexTo2d(tile.position)
 
-  drawHexagon(center, rotatedEdges, tileRadius * 1.15)
+  drawHexagon(center, rotatedEdges, tileRadius * 1.15, rotationAngle)
 }
 
-function drawHexagon(center, edges, radius) {
+function drawHexagon(center, edges, radius, rotationAngle) {
   const niceColors = {
     [COLOR1]: '#3d184e',
     [COLOR2]: '#2e97a9',
@@ -438,8 +474,8 @@ function drawHexagon(center, edges, radius) {
   ctx.fill()
 
   edges.forEach((color, rotation) => {
-    const angleStart = (rotation - 0.5) / EDGES * 2 * Math.PI;
-    const angleEnd = (rotation + 0.5) / EDGES * 2 * Math.PI;
+    const angleStart = rotationAngle + (rotation - 0.5) / EDGES * 2 * Math.PI;
+    const angleEnd = rotationAngle + (rotation + 0.5) / EDGES * 2 * Math.PI;
 
     const topPoint = { x: center.x, y: center.y + radius }
     const bottomPoint = { x: center.x, y: center.y + radius * (1 - sidesExtent) }
@@ -515,17 +551,22 @@ window.addEventListener('resize', () => draw());
 canvas.addEventListener('click', handleCanvasClick);
 
 function restart() {
-  const initialField = fullField(Object.keys(VARIANTS_TO_EDGES), POSITIONS)
-  const collapsedField = collapseField(initialField, lowestPossibilityEntropyPosition)
-  const tiles = collapsedFieldToTiles(collapsedField)
-  /*
-  state.tiles.forEach(tile => {
-    tile.topEdge = (tile.topEdge + 1) % EDGES
-  })
-  */
-  // state.field = collapsedField
-  state.field = {}
-  state.tiles = tiles
-  draw();
+  if (state.tiles.length > 0) {
+    // Transition
+    const startTiles = state.tiles.map(tile => ({ ...tile, topEdge: 0 }))
+    const endTiles = state.tiles
+    drawTransition(startTiles, endTiles, () => {
+      state.tiles = endTiles
+    })
+  } else {
+    // Initial tiles
+    const initialField = fullField(Object.keys(VARIANTS_TO_EDGES), POSITIONS)
+    const collapsedField = collapseField(initialField, lowestPossibilityEntropyPosition)
+    const tiles = collapsedFieldToTiles(collapsedField)
+    // state.field = collapsedField
+    state.field = {}
+    state.tiles = tiles
+    draw()
+  }
 }
 restart();
