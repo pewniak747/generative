@@ -13,15 +13,17 @@ const COLORS = [COLOR1, COLOR2, COLOR3]
 const EDGES = 6
 
 const VARIANTS_TO_EDGES = {
-  'RGBRGB': [COLOR1, COLOR2, COLOR3, COLOR1, COLOR2, COLOR3],
-  'RGBBRG': [COLOR1, COLOR2, COLOR3, COLOR3, COLOR1, COLOR2],
-  'RRRBRG': [COLOR1, COLOR1, COLOR1, COLOR3, COLOR1, COLOR2],
-  'BBBGGG': [COLOR3, COLOR3, COLOR3, COLOR2, COLOR2, COLOR2],
+  // 'RGBRGB': [COLOR1, COLOR2, COLOR3, COLOR1, COLOR2, COLOR3],
+  // 'RGBBRG': [COLOR1, COLOR2, COLOR3, COLOR3, COLOR1, COLOR2],
+  // 'RRRBRG': [COLOR1, COLOR1, COLOR1, COLOR3, COLOR1, COLOR2],
+  // 'BBBGGG': [COLOR3, COLOR3, COLOR3, COLOR2, COLOR2, COLOR2],
   'RRRGGG': [COLOR1, COLOR1, COLOR1, COLOR2, COLOR2, COLOR2],
-  'RRRRRR': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1]
+  'RRRRRR': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
+  'GGGRRR': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
+  'GGGGGG': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
 }
 
-const span = rangeInclusive(-3, 3)
+const span = rangeInclusive(-4, 4)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)
 
 function rangeInclusive(start, stop) {
@@ -145,7 +147,7 @@ function collapseFieldFromRandomPosition(initialField, entropyFn) {
   // TODO
 }
 
-function collapseField(initialField, entropyFn) {
+function collapseField(initialField, collapseFieldOnPosition, entropyFn) {
   const fieldSize = Object.keys(initialField).length
   let currentField = initialField;
   for (let iteration = 0; iteration < fieldSize + 100; iteration += 1) {
@@ -208,7 +210,7 @@ function validNeighbourPossibility(possibility, edge, neighbourPossibility) {
   return color === neighbourColor
 }
 
-function collapseFieldOnPosition(field, position, possibility) {
+function fullyCollapseFieldOnPosition(field, position, possibility) {
   const currentField = {
     ...field,
     [positionToKey(position)]: [possibility]
@@ -256,12 +258,50 @@ function collapseFieldOnPosition(field, position, possibility) {
   return propagateStep(currentField, position, possibility)
 }
 
-function collapseFieldOnAllPositions(field) {
-  // TODO: returns a list of fields
+function collapseFieldToSingleVariantOnPosition(field, position, possibility) {
+  const possibilities = field[positionToKey(position)].filter(p => p.variant === possibility.variant)
+  const collapsedFields = possibilities.map(p => fullyCollapseFieldOnPosition(field, position, p))
+  // Returns field
+  return collapsedFields.reduce((field1, field2) => mergeFields(field1, field2))
 }
 
 function mergeFields(field1, field2) {
-  // TODO: returns field
+  // return field1
+  const resultField = {}
+  Object.keys(field1).map(key => {
+    const possibilities1 = field1[key]
+    const possibilities2 = field2[key]
+    const variants1 = new Set(possibilities1.map(p => p.variant))
+    const variants2 = new Set(possibilities2.map(p => p.variant))
+    const commonVariants = intersection(variants1, variants2)
+    const commonPossibilitiesSet = new Set()
+    const commonPossibilities = []
+    possibilities1.filter(p => commonVariants.has(p.variant)).forEach(p => {
+      if (!commonPossibilitiesSet.has(JSON.stringify(p))) {
+        commonPossibilitiesSet.add(JSON.stringify(p))
+        commonPossibilities.push(p)
+      }
+    })
+    possibilities2.filter(p => commonVariants.has(p.variant)).forEach(p => {
+      if (!commonPossibilitiesSet.has(JSON.stringify(p))) {
+        commonPossibilitiesSet.add(JSON.stringify(p))
+        commonPossibilities.push(p)
+      }
+    })
+    resultField[key] = commonPossibilities
+  })
+  // Returns field
+  return resultField
+}
+
+function intersection(setA, setB) {
+  let _intersection = new Set()
+  for (let elem of setB) {
+    if (setA.has(elem)) {
+      _intersection.add(elem)
+    }
+  }
+  return _intersection
 }
 
 function collapsedFieldToTiles(field) {
@@ -338,7 +378,7 @@ function draw() {
     drawTile(tile)
   })
   if (state.field) {
-    drawField(state.field)
+    // drawField(state.field)
   }
   console.timeEnd('draw')
 }
@@ -350,6 +390,7 @@ function drawTransition(startTiles_, endTiles_, done) {
   let firstFrameAt = performance.now()
   let animationLength = 1000 // ms
   function drawAnimationFrame(timestamp) {
+    // console.log("Animation frame")
     const timeProgress = clamp(0, animationLength, timestamp - firstFrameAt)
     const progress = timeProgress / animationLength
 
@@ -358,17 +399,22 @@ function drawTransition(startTiles_, endTiles_, done) {
       for (let i = 0; i < endTiles.length; i += 1) {
         const startTile = startTiles[i]
         const endTile = endTiles[i]
-        const edgeDiff = (endTile.topEdge - startTile.topEdge) % EDGES
-        const angle = (1 - progress) * edgeDiff / EDGES * 2 * Math.PI
-        drawTile(endTile, -angle)
+        let edgeDiff = (endTile.topEdge - startTile.topEdge) % EDGES
+        if (edgeDiff === 0) edgeDiff += EDGES // If the same top edge - do a full rotation
+        const angle = (1 - progress) * (edgeDiff / EDGES) * 2 * Math.PI
+        // console.log(endTile.topEdge, startTile.topEdge, edgeDiff, angle)
+        drawTile(endTile, angle)
       }
 
-      requestAnimationFrame(drawAnimationFrame)
+      if (progress < 1) {
+        requestAnimationFrame(drawAnimationFrame)
+      }
     } else {
       done()
     }
   }
 
+  console.log("Drawing transition...")
   requestAnimationFrame(drawAnimationFrame)
 
   clearCanvas()
@@ -382,6 +428,7 @@ function drawTransition(startTiles_, endTiles_, done) {
 function clearCanvas() {
   ctx.save();
   ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#f3fafb'
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 }
@@ -465,7 +512,7 @@ function drawHexagon(center, edges, radius, rotationAngle) {
     [COLOR3]: '#2a496e',
   }
   const centerColor = '#eee'
-  const sidesExtent = 0.33
+  const sidesExtent = 0.999
   ctx.save();
 
   ctx.beginPath();
@@ -553,18 +600,20 @@ canvas.addEventListener('click', handleCanvasClick);
 function restart() {
   if (state.tiles.length > 0) {
     // Transition
-    const startTiles = state.tiles.map(tile => ({ ...tile, topEdge: 0 }))
-    const endTiles = state.tiles
+    const startTiles = state.tiles
+    const collapsedField = collapseField(state.field, fullyCollapseFieldOnPosition, lowestPossibilityEntropyPosition)
+    const endTiles = collapsedFieldToTiles(collapsedField)
     drawTransition(startTiles, endTiles, () => {
       state.tiles = endTiles
     })
   } else {
     // Initial tiles
     const initialField = fullField(Object.keys(VARIANTS_TO_EDGES), POSITIONS)
-    const collapsedField = collapseField(initialField, lowestPossibilityEntropyPosition)
+    const field = collapseField(initialField, collapseFieldToSingleVariantOnPosition, lowestVariantEntropyPosition)
+    const collapsedField = collapseField(field, fullyCollapseFieldOnPosition, lowestPossibilityEntropyPosition)
     const tiles = collapsedFieldToTiles(collapsedField)
-    // state.field = collapsedField
-    state.field = {}
+    state.field = field
+    // state.field = {}
     state.tiles = tiles
     draw()
   }
