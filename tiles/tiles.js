@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 150;
+const unitLength = 50;
 const tileRadius = 0.5
 let DEBUG = false;
 
@@ -13,17 +13,17 @@ const COLORS = [COLOR1, COLOR2, COLOR3]
 const EDGES = 6
 
 const VARIANTS_TO_EDGES = {
-  // 'RGBRGB': [COLOR1, COLOR2, COLOR3, COLOR1, COLOR2, COLOR3],
-  // 'RGBBRG': [COLOR1, COLOR2, COLOR3, COLOR3, COLOR1, COLOR2],
-  // 'RRRBRG': [COLOR1, COLOR1, COLOR1, COLOR3, COLOR1, COLOR2],
-  // 'BBBGGG': [COLOR3, COLOR3, COLOR3, COLOR2, COLOR2, COLOR2],
-  'RRRGGG': [COLOR1, COLOR1, COLOR1, COLOR2, COLOR2, COLOR2],
-  'RRRRRR': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
-  'GGGRRR': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
-  'GGGGGG': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
+  // '123123': [COLOR1, COLOR2, COLOR3, COLOR1, COLOR2, COLOR3],
+  // '123312': [COLOR1, COLOR2, COLOR3, COLOR3, COLOR1, COLOR2],
+  // '111312': [COLOR1, COLOR1, COLOR1, COLOR3, COLOR1, COLOR2],
+  // '333222': [COLOR3, COLOR3, COLOR3, COLOR2, COLOR2, COLOR2],
+  '111222': [COLOR1, COLOR1, COLOR1, COLOR2, COLOR2, COLOR2],
+  '111111': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
+  '222111': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
+  '222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
 }
 
-const span = rangeInclusive(-4, 4)
+const span = rangeInclusive(-6, 6)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)
 
 function rangeInclusive(start, stop) {
@@ -387,8 +387,10 @@ function drawTransition(startTiles_, endTiles_, done) {
   const startTiles = startTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
   const endTiles = endTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
 
-  let firstFrameAt = performance.now()
-  let animationLength = 1000 // ms
+  const firstFrameAt = performance.now()
+  const tileDelay = 100 // ms
+  const tileAnimationLength = 500 // ms
+  const animationLength = tileAnimationLength * 5
   function drawAnimationFrame(timestamp) {
     // console.log("Animation frame")
     const timeProgress = clamp(0, animationLength, timestamp - firstFrameAt)
@@ -399,10 +401,12 @@ function drawTransition(startTiles_, endTiles_, done) {
       for (let i = 0; i < endTiles.length; i += 1) {
         const startTile = startTiles[i]
         const endTile = endTiles[i]
+        const tileDistanceFromCenter = Math.max(...endTile.position.map(coordinate => Math.abs(coordinate)))
+        const tileProgress = clamp(0, 1, (timeProgress - tileDistanceFromCenter * tileDelay) / tileAnimationLength)
         let edgeDiff = (endTile.topEdge - startTile.topEdge) % EDGES
-        if (edgeDiff === 0) edgeDiff += EDGES // If the same top edge - do a full rotation
-        const angle = (1 - progress) * (edgeDiff / EDGES) * 2 * Math.PI
-        // console.log(endTile.topEdge, startTile.topEdge, edgeDiff, angle)
+        if (Math.abs(edgeDiff) > EDGES / 2) edgeDiff -= Math.sign(edgeDiff) * EDGES // Always choose the shortest rotation
+        const angle = (1 - tileProgress) * (edgeDiff / EDGES) * 2 * Math.PI
+        // console.log("Rotating tile", endTile.topEdge, startTile.topEdge, edgeDiff, angle)
         drawTile(endTile, angle)
       }
 
