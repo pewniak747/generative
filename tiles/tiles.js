@@ -1,30 +1,48 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 50;
+const unitLength = 100;
 const tileRadius = 0.5
 let DEBUG = false;
 
 const COLOR1 = "red"
 const COLOR2 = "green"
 const COLOR3 = "blue"
+const COLOR4 = "yellow"
 
-const COLORS = [COLOR1, COLOR2, COLOR3]
+const COLORS = [COLOR1, COLOR2, COLOR3, COLOR4]
 
 const EDGES = 6
 
 const VARIANTS_TO_EDGES = {
-  // '123123': [COLOR1, COLOR2, COLOR3, COLOR1, COLOR2, COLOR3],
-  // '123312': [COLOR1, COLOR2, COLOR3, COLOR3, COLOR1, COLOR2],
-  // '111312': [COLOR1, COLOR1, COLOR1, COLOR3, COLOR1, COLOR2],
+  //'111111': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
+  //'112111': [COLOR1, COLOR1, COLOR2, COLOR1, COLOR1, COLOR1],
+  '112211': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR1, COLOR1],
+  '112221': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR1],
+  //'112222': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR2],
+  //'122222': [COLOR1, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
+  //'222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
+  //'121212': [COLOR1, COLOR2, COLOR1, COLOR2, COLOR1, COLOR2],
+  //'112112': [COLOR1, COLOR1, COLOR2, COLOR1, COLOR1, COLOR2],
+  // '112222': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR2],
+  // '333333': [COLOR3, COLOR3, COLOR3, COLOR3, COLOR3, COLOR3],
+  // '333111': [COLOR3, COLOR3, COLOR3, COLOR1, COLOR1, COLOR1],
+  // '113322': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR2, COLOR2],
+  // '112244': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR4, COLOR4],
+  // '113344': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR4, COLOR4],
+  // '223344': [COLOR2, COLOR2, COLOR3, COLOR3, COLOR4, COLOR4],
   // '333222': [COLOR3, COLOR3, COLOR3, COLOR2, COLOR2, COLOR2],
-  '111222': [COLOR1, COLOR1, COLOR1, COLOR2, COLOR2, COLOR2],
-  '111111': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
-  '222111': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
-  '222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
+  // '111222': [COLOR1, COLOR1, COLOR1, COLOR2, COLOR2, COLOR2],
+  // '111111': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
+  // '222111': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
+  // '222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
 }
 
-const span = rangeInclusive(-6, 6)
-const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)
+const span = rangeInclusive(-3, 3)
+const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
+
+function freeze(obj) {
+  return Object.freeze(obj)
+}
 
 function rangeInclusive(start, stop) {
   return Array(stop - start + 1).fill(null).map((_, idx) => idx + start)
@@ -111,36 +129,31 @@ function keyToPosition(key) {
 }
 
 function lowestVariantEntropyPosition(field) {
-  let minEntropy = Infinity
-  let minPosition = null
-  Object.keys(field).map(key => {
+  const positionsWithEntropy = Object.keys(field).map(key => {
     const possibilities = field[key]
     const position = keyToPosition(key)
     const variants = new Set(possibilities.map(p => p.variant)).size
-    const entropy = variants <= 1 ? Infinity : possibilities.length / variants // TODO
-    if (entropy < minEntropy) {
-      minEntropy = entropy
-      minPosition = position
-    }
+    const entropy = variants <= 1 ? 0 : possibilities.length // TODO
+    return [position, entropy]
   })
-  // Returns position | null
-  return minPosition
+    .filter(([_, entropy]) => entropy > 0)
+    .sort(([position1, entropy1], [position2, entropy2]) => entropy1 === entropy2 ? Math.random() - 0.5 : entropy1 - entropy2)
+  // console.log(positionsWithEntropy)
+  // Returns positions
+  return positionsWithEntropy.map(([position, _]) => position)
 }
 
 function lowestPossibilityEntropyPosition(field) {
-  let minEntropy = Infinity
-  let minPosition = null
-  Object.keys(field).map(key => {
+  const positionsWithEntropy = Object.keys(field).map(key => {
     const possibilities = field[key]
     const position = keyToPosition(key)
-    const entropy = possibilities.length <= 1 ? Infinity : possibilities.length // TODO
-    if (entropy < minEntropy) {
-      minEntropy = entropy
-      minPosition = position
-    }
+    const entropy = possibilities.length <= 1 ? 0 : possibilities.length // TODO
+    return [position, entropy]
   })
-  // Returns position | null
-  return minPosition
+    .filter(([_, entropy]) => entropy > 0)
+    .sort(([position1, entropy1], [position2, entropy2]) => entropy1 - entropy2)
+  // Returns positions
+  return positionsWithEntropy.map(([position, _]) => position)
 }
 
 function collapseFieldFromRandomPosition(initialField, entropyFn) {
@@ -150,29 +163,53 @@ function collapseFieldFromRandomPosition(initialField, entropyFn) {
 function collapseField(initialField, collapseFieldOnPosition, entropyFn) {
   const fieldSize = Object.keys(initialField).length
   let currentField = initialField;
-  for (let iteration = 0; iteration < fieldSize + 100; iteration += 1) {
-    const chosenPosition = entropyFn(currentField)
-    if (chosenPosition === null) {
+  let history = []
+  for (let iteration = 0; iteration < fieldSize; iteration += 1) {
+    const positionsByEntropy = entropyFn(currentField)
+    if (positionsByEntropy.length === 0) {
       break;
     }
-    const possibilities = currentField[positionToKey(chosenPosition)]
-    const chosenPossibility = possibilities[Math.floor(possibilities.length * Math.random())]
-    console.log("Collapsing:", chosenPosition, chosenPossibility)
-    const collapsedField = collapseFieldOnPosition(currentField, chosenPosition, chosenPossibility)
-    if (validField(collapsedField)) {
-      currentField = collapsedField
-      console.log("Collapsed.", currentField)
-    } else {
-      console.log("Did not collapse to a valid field. Backtracking...")
+    const possibilitiesByEntropy = positionsByEntropy.map(position =>
+      currentField[positionToKey(position)]
+        .slice()
+        .sort(() => Math.random() - 0.5)
+        .map(possibility => [position, possibility])
+    ).reduce((a, b) => a.concat(b), [])
+    let chosenPosition = null
+    let chosenPossibility = null
+    let backtracks = 0;
+    for (backtracks; backtracks < possibilitiesByEntropy.length; backtracks += 1) {
+      chosenPosition = possibilitiesByEntropy[backtracks][0]
+      chosenPossibility = possibilitiesByEntropy[backtracks][1]
+      // console.log("Collapsing:", chosenPosition, chosenPossibility)
+      const collapsedField = collapseFieldOnPosition(currentField, chosenPosition, chosenPossibility)
+      if (validField(collapsedField)) {
+        currentField = freeze(collapsedField)
+        history.push({ field: currentField, position: chosenPosition })
+        console.log(`Collapsed ${fieldSize + 1 - positionsByEntropy.length} / ${fieldSize}`)
+        break;
+      } else {
+        console.log("Did not collapse to a valid field. Backtracking...")
+        history.push({ field: collapsedField, position: chosenPosition })
+        history.forEach(({ field, position }) => {
+          // debugField(field, position)
+        })
+      }
     }
-
+    if (backtracks === possibilitiesByEntropy.length) {
+      console.warn("Could not backtrack.")
+      break
+    }
     // debugField(currentField, chosenPosition)
   }
 
-  if (entropyFn(currentField) !== null) {
+  if (entropyFn(currentField).length !== 0) {
     console.warn("Field was not fully collapsed!")
+  } else {
+    console.log("Field fully collapsed.")
+    // debugField(currentField)
   }
-  return currentField;
+  return freeze(currentField);
 }
 
 function neighbouringPositions(field, position) {
@@ -211,11 +248,12 @@ function validNeighbourPossibility(possibility, edge, neighbourPossibility) {
 }
 
 function fullyCollapseFieldOnPosition(field, position, possibility) {
-  const currentField = {
+  let currentField = {
     ...field,
     [positionToKey(position)]: [possibility]
   }
   const visitedPositionKeys = new Set()
+  const positionsToVisit = [position]
 
   function visited(position) {
     return visitedPositionKeys.has(positionToKey(position))
@@ -223,6 +261,7 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
 
   function propagateStep(field, position) {
     if (visited(position)) {
+      // console.error("Should not visit already visited field")
       return field
     }
     visitedPositionKeys.add(positionToKey(position))
@@ -230,32 +269,48 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
     // Propagation
     const allNeighbours = neighbouringPositions(field, position)
     const neighboursToPropagate = allNeighbours.filter(position => !visited(position))
-    const neigboursToVisit = []
-    const possibilities = field[positionToKey(position)]
     let currentField = field
-    // console.log(`Visiting position`, position)
+    // console.log(`Visiting position`, positionToKey(position))
     // console.log(`Visited ${visitedPositionKeys.size} positions.`)
     // console.log(`Propagating to ${neighboursToPropagate.length} neighbours.`, neighboursToPropagate)
     neighboursToPropagate.forEach(neighbour => {
       const edge = neighbourEdge(position, neighbour)
-      const neighbourPossibilities = field[positionToKey(neighbour)]
+      const reverseEdge = neighbourEdge(neighbour, position)
+      const possibilities = currentField[positionToKey(position)]
+      const neighbourPossibilities = currentField[positionToKey(neighbour)]
+      const validPossibilities = possibilities.filter(p => neighbourPossibilities.some(np => validNeighbourPossibility(np, reverseEdge, p)))
       const validNeighbourPossibilities = neighbourPossibilities.filter(np => possibilities.some(p => validNeighbourPossibility(p, edge, np)))
-      // console.log(`Propagating alongside edge ${edge}`, position, neighbour)
-      if (validNeighbourPossibilities.length < neighbourPossibilities.length) {
+      // console.log(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
+      if (validPossibilities.length < possibilities.length || validNeighbourPossibilities.length < neighbourPossibilities.length) {
+        // console.log("Found changes", validPossibilities, neighbourPossibilities)
         currentField = {
           ...currentField,
+          [positionToKey(position)]: validPossibilities,
           [positionToKey(neighbour)]: validNeighbourPossibilities
         }
-        neigboursToVisit.push(neighbour)
+        if (validPossibilities.length < possibilities.length) {
+          positionsToVisit.push(position)
+        }
+        if (validNeighbourPossibilities.length < neighbourPossibilities.length) {
+          positionsToVisit.push(neighbour)
+        }
+      } else {
+        // console.log("No changes")
       }
       // debugField(currentField, position, neighbour)
     })
 
 
-    return neigboursToVisit.reduce((field, neighbour) => propagateStep(field, neighbour), currentField);
+    // console.log("Step propagated. Neighbours to visit:", neigboursToVisit.length)
+    // return neigboursToVisit.reduce((field, neighbour) => propagateStep(field, neighbour), currentField);
+    return currentField
+  }
+
+  while (positionsToVisit.length > 0) {
+    currentField = propagateStep(currentField, positionsToVisit.shift())
   }
   // Returns field
-  return propagateStep(currentField, position, possibility)
+  return currentField
 }
 
 function collapseFieldToSingleVariantOnPosition(field, position, possibility) {
@@ -277,14 +332,14 @@ function mergeFields(field1, field2) {
     const commonPossibilitiesSet = new Set()
     const commonPossibilities = []
     possibilities1.filter(p => commonVariants.has(p.variant)).forEach(p => {
-      if (!commonPossibilitiesSet.has(JSON.stringify(p))) {
-        commonPossibilitiesSet.add(JSON.stringify(p))
-        commonPossibilities.push(p)
-      }
+      // if (!commonPossibilitiesSet.has(possibilityToKey(p))) {
+      commonPossibilitiesSet.add(possibilityToKey(p))
+      commonPossibilities.push(p)
+      // }
     })
     possibilities2.filter(p => commonVariants.has(p.variant)).forEach(p => {
-      if (!commonPossibilitiesSet.has(JSON.stringify(p))) {
-        commonPossibilitiesSet.add(JSON.stringify(p))
+      if (!commonPossibilitiesSet.has(possibilityToKey(p))) {
+        commonPossibilitiesSet.add(possibilityToKey(p))
         commonPossibilities.push(p)
       }
     })
@@ -292,6 +347,10 @@ function mergeFields(field1, field2) {
   })
   // Returns field
   return resultField
+}
+
+function possibilityToKey(possibility) {
+  return JSON.stringify(possibility)
 }
 
 function intersection(setA, setB) {
@@ -480,7 +539,7 @@ function drawFieldPossibilities(position, possibilities) {
     const topPoint = { x: center.x, y: center.y + tileRadius * 0.8 }
     const tileCenter = rotateClockwise(topPoint, center, angle)
     const tileEdges = edgesForVariant(possibility.variant, possibility.topEdge)
-    drawHexagon(tileCenter, tileEdges, tileRadius / 8)
+    drawHexagon(tileCenter, tileEdges, clamp(0.01, 1.0, tileRadius / 8), 0)
   })
 
   ctx.restore()
@@ -614,6 +673,7 @@ function restart() {
     // Initial tiles
     const initialField = fullField(Object.keys(VARIANTS_TO_EDGES), POSITIONS)
     const field = collapseField(initialField, collapseFieldToSingleVariantOnPosition, lowestVariantEntropyPosition)
+    // debugField(field)
     const collapsedField = collapseField(field, fullyCollapseFieldOnPosition, lowestPossibilityEntropyPosition)
     const tiles = collapsedFieldToTiles(collapsedField)
     state.field = field
