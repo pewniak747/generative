@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 100;
+const unitLength = 200;
 const tileRadius = 0.5
 let DEBUG = false;
 
@@ -37,7 +37,7 @@ const VARIANTS_TO_EDGES = {
   // '222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
 }
 
-const span = rangeInclusive(-3, 3)
+const span = rangeInclusive(-2, 2)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
 
 function freeze(obj) {
@@ -186,13 +186,13 @@ function collapseField(initialField, collapseFieldOnPosition, entropyFn) {
       if (validField(collapsedField)) {
         currentField = freeze(collapsedField)
         history.push({ field: currentField, position: chosenPosition })
-        console.log(`Collapsed ${fieldSize + 1 - positionsByEntropy.length} / ${fieldSize}`)
+        console.log(`Collapsed ${fieldSize + 1 - positionsByEntropy.length} / ${fieldSize} on ${positionToKey(chosenPosition)}`)
         break;
       } else {
         console.log("Did not collapse to a valid field. Backtracking...")
         history.push({ field: collapsedField, position: chosenPosition })
         history.forEach(({ field, position }) => {
-          // debugField(field, position)
+          debugField(field, position)
         })
       }
     }
@@ -204,7 +204,7 @@ function collapseField(initialField, collapseFieldOnPosition, entropyFn) {
   }
 
   if (entropyFn(currentField).length !== 0) {
-    console.warn("Field was not fully collapsed!")
+    throw new Error("Field was not fully collapsed!")
   } else {
     console.log("Field fully collapsed.")
     // debugField(currentField)
@@ -252,27 +252,14 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
     ...field,
     [positionToKey(position)]: [possibility]
   }
-  const visitedPositionKeys = new Set()
   const positionsToVisit = [position]
 
-  function visited(position) {
-    return visitedPositionKeys.has(positionToKey(position))
-  }
-
+  // Propagation
   function propagateStep(field, position) {
-    if (visited(position)) {
-      // console.error("Should not visit already visited field")
-      return field
-    }
-    visitedPositionKeys.add(positionToKey(position))
-
-    // Propagation
-    const allNeighbours = neighbouringPositions(field, position)
-    const neighboursToPropagate = allNeighbours.filter(position => !visited(position))
+    const neighboursToPropagate = neighbouringPositions(field, position)
     let currentField = field
-    // console.log(`Visiting position`, positionToKey(position))
-    // console.log(`Visited ${visitedPositionKeys.size} positions.`)
-    // console.log(`Propagating to ${neighboursToPropagate.length} neighbours.`, neighboursToPropagate)
+    // console.debug(`Visiting position`, positionToKey(position))
+    // console.debug(`Propagating to ${neighboursToPropagate.length} neighbours.`, neighboursToPropagate)
     neighboursToPropagate.forEach(neighbour => {
       const edge = neighbourEdge(position, neighbour)
       const reverseEdge = neighbourEdge(neighbour, position)
@@ -280,9 +267,10 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
       const neighbourPossibilities = currentField[positionToKey(neighbour)]
       const validPossibilities = possibilities.filter(p => neighbourPossibilities.some(np => validNeighbourPossibility(np, reverseEdge, p)))
       const validNeighbourPossibilities = neighbourPossibilities.filter(np => possibilities.some(p => validNeighbourPossibility(p, edge, np)))
-      // console.log(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
+      // console.debug(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
+      // console.debug(`And reverse edge ${reverseEdge}: ${positionToKey(neighbour)} -> ${positionToKey(position)}`)
       if (validPossibilities.length < possibilities.length || validNeighbourPossibilities.length < neighbourPossibilities.length) {
-        // console.log("Found changes", validPossibilities, neighbourPossibilities)
+        // console.debug("Found changes", validPossibilities, neighbourPossibilities)
         currentField = {
           ...currentField,
           [positionToKey(position)]: validPossibilities,
@@ -295,14 +283,11 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
           positionsToVisit.push(neighbour)
         }
       } else {
-        // console.log("No changes")
+        // console.debug("No changes")
       }
       // debugField(currentField, position, neighbour)
     })
 
-
-    // console.log("Step propagated. Neighbours to visit:", neigboursToVisit.length)
-    // return neigboursToVisit.reduce((field, neighbour) => propagateStep(field, neighbour), currentField);
     return currentField
   }
 
@@ -681,5 +666,15 @@ function restart() {
     state.tiles = tiles
     draw()
   }
+}
+
+function test() {
+  console.log("Test started")
+  const tests = 100;
+  for (let i = 1; i <= tests; i += 1) {
+    console.log(`Test ${i} / ${tests}`)
+    restart()
+  }
+  console.log("Test ended")
 }
 restart();
