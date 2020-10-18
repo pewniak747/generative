@@ -4,20 +4,54 @@ const unitLength = 200;
 const tileRadius = 0.5
 let DEBUG = false;
 
-const COLOR1 = "red"
-const COLOR2 = "green"
-const COLOR3 = "blue"
-const COLOR4 = "yellow"
-
-const COLORS = [COLOR1, COLOR2, COLOR3, COLOR4]
+const COLOR0 = "0"
+const COLOR1 = "1"
+const COLOR2 = "2"
+const COLOR3 = "3"
+const COLOR4 = "4"
 
 const EDGES = 6
 
+const COLORS = [COLOR1, COLOR2]
+
+const allEdges = COLORS.map(c1 => COLORS.map(c2 => COLORS.map(c3 => COLORS.map(c4 => COLORS.map(c5 => COLORS.map(c6 => [c1, c2, c3, c4, c5, c6])))))).flat(5)
+console.log(allEdges)
+
+const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
+  const newEdges = rangeInclusive(1, EDGES).map(edge => rotateEdges(edges, edge)).map(edges => edges.join('')).every(key => !acc[key])
+  const sameEdges = new Set(edges).size === 1
+  if (newEdges && !sameEdges) {
+    return {
+      ...acc,
+      [edges.join('')]: edges
+    }
+  } else {
+    return acc
+  }
+}, {})
+console.log(ALL_VARIANTS_TO_EDGES)
+console.log(Object.keys(ALL_VARIANTS_TO_EDGES).length)
+
+const EMPTY_POSSIBILITY = { variant: '000000', topEdge: 0 }
+
 const VARIANTS_TO_EDGES = {
+  ...ALL_VARIANTS_TO_EDGES,
+  [EMPTY_POSSIBILITY.variant]: [COLOR0, COLOR0, COLOR0, COLOR0, COLOR0, COLOR0]
+}
+
+const DRAWN_VARIANTS_TO_EDGES = {
+  ...VARIANTS_TO_EDGES
+}
+/*
+const VARIANTS_TO_EDGES = {
+  '001122': [COLOR0, COLOR0, COLOR1, COLOR1, COLOR2, COLOR2],
+  '002233': [COLOR0, COLOR0, COLOR2, COLOR2, COLOR3, COLOR3],
+  '003311': [COLOR0, COLOR0, COLOR3, COLOR3, COLOR1, COLOR1],
+  '100110': [COLOR1, COLOR0, COLOR0, COLOR1, COLOR1, COLOR0],
   //'111111': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR1, COLOR1],
   //'112111': [COLOR1, COLOR1, COLOR2, COLOR1, COLOR1, COLOR1],
-  '112211': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR1, COLOR1],
-  '112221': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR1],
+  // '112211': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR1, COLOR1],
+  // '112221': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR1],
   //'112222': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR2],
   //'122222': [COLOR1, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
   //'222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
@@ -26,7 +60,7 @@ const VARIANTS_TO_EDGES = {
   // '112222': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR2, COLOR2],
   // '333333': [COLOR3, COLOR3, COLOR3, COLOR3, COLOR3, COLOR3],
   // '333111': [COLOR3, COLOR3, COLOR3, COLOR1, COLOR1, COLOR1],
-  // '113322': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR2, COLOR2],
+  '113322': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR2, COLOR2],
   // '112244': [COLOR1, COLOR1, COLOR2, COLOR2, COLOR4, COLOR4],
   // '113344': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR4, COLOR4],
   // '223344': [COLOR2, COLOR2, COLOR3, COLOR3, COLOR4, COLOR4],
@@ -36,6 +70,7 @@ const VARIANTS_TO_EDGES = {
   // '222111': [COLOR2, COLOR2, COLOR2, COLOR1, COLOR1, COLOR1],
   // '222222': [COLOR2, COLOR2, COLOR2, COLOR2, COLOR2, COLOR2],
 }
+*/
 
 const span = rangeInclusive(-2, 2)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
@@ -53,7 +88,11 @@ function validPosition(position) {
 }
 
 function edgesForVariant(variant, topEdge) {
-  const edges = VARIANTS_TO_EDGES[variant]
+  const edges = DRAWN_VARIANTS_TO_EDGES[variant]
+  return rotateEdges(edges, topEdge)
+}
+
+function rotateEdges(edges, topEdge) {
   return edges.slice(topEdge, EDGES).concat(edges.slice(0, Math.max(0, topEdge)))
 }
 
@@ -156,55 +195,75 @@ function lowestPossibilityEntropyPosition(field) {
   return positionsWithEntropy.map(([position, _]) => position)
 }
 
+function generatePossibilityCollapseCandidates(field) {
+  const positionsByEntropy = lowestPossibilityEntropyPosition(field)
+  const possibilitiesByEntropy = positionsByEntropy.map(position =>
+    field[positionToKey(position)]
+      .slice()
+      .sort(() => Math.random() - 0.5)
+      .map(possibility => [position, possibility])
+  ).reduce((a, b) => a.concat(b), [])
+  return possibilitiesByEntropy.map(([position, possibility]) => ({ position, possibility }))
+}
+
+function generateVariantCollapseCandidates(field) {
+  const positionsByEntropy = lowestVariantEntropyPosition(field)
+  const variantsByEntropy = positionsByEntropy.map(position => {
+    const variants = field[positionToKey(position)]
+      .slice()
+      .map(possibility => possibility.variant)
+      .reduce((set, variant) => set.add(variant), new Set())
+    return Array.from(variants)
+      .sort(() => Math.random() - 0.5)
+      .map(variant => [position, variant])
+  }).reduce((a, b) => a.concat(b), [])
+  return variantsByEntropy.map(([position, variant]) => ({ position, variant }))
+}
+
 function collapseFieldFromRandomPosition(initialField, entropyFn) {
   // TODO
 }
 
-function collapseField(initialField, collapseFieldOnPosition, entropyFn) {
+function collapseField(initialField, collapseFieldOnCandidate, generateCollapseCandidates) {
   const fieldSize = Object.keys(initialField).length
   let currentField = initialField;
   let history = []
   for (let iteration = 0; iteration < fieldSize; iteration += 1) {
-    const positionsByEntropy = entropyFn(currentField)
-    if (positionsByEntropy.length === 0) {
+    const candidates = generateCollapseCandidates(currentField)
+    // console.log("CANDIDATES", candidates)
+    if (candidates.length === 0) {
       break;
     }
-    const possibilitiesByEntropy = positionsByEntropy.map(position =>
-      currentField[positionToKey(position)]
-        .slice()
-        .sort(() => Math.random() - 0.5)
-        .map(possibility => [position, possibility])
-    ).reduce((a, b) => a.concat(b), [])
-    let chosenPosition = null
-    let chosenPossibility = null
+    let candidate = null
     let backtracks = 0;
-    for (backtracks; backtracks < possibilitiesByEntropy.length; backtracks += 1) {
-      chosenPosition = possibilitiesByEntropy[backtracks][0]
-      chosenPossibility = possibilitiesByEntropy[backtracks][1]
-      // console.log("Collapsing:", chosenPosition, chosenPossibility)
-      const collapsedField = collapseFieldOnPosition(currentField, chosenPosition, chosenPossibility)
+    let maxBacktracks = candidates.length
+    for (backtracks; backtracks < maxBacktracks; backtracks += 1) {
+      candidate = candidates[backtracks]
+      // console.log("Collapsing:", candidate.position, candidate.possibility)
+      const collapsedField = collapseFieldOnCandidate(currentField, candidate)
       if (validField(collapsedField)) {
         currentField = freeze(collapsedField)
-        history.push({ field: currentField, position: chosenPosition })
-        console.log(`Collapsed ${fieldSize + 1 - positionsByEntropy.length} / ${fieldSize} on ${positionToKey(chosenPosition)}`)
+        history.push({ field: currentField, position: candidate.position })
+        console.log(`Collapsed ${iteration} / ${fieldSize} on ${positionToKey(candidate.position)}`)
         break;
       } else {
         console.log("Did not collapse to a valid field. Backtracking...")
-        history.push({ field: collapsedField, position: chosenPosition })
+        history.push({ field: collapsedField, position: candidate.position })
         history.forEach(({ field, position }) => {
-          debugField(field, position)
+          // debugField(field, position)
         })
       }
     }
-    if (backtracks === possibilitiesByEntropy.length) {
+    if (backtracks >= maxBacktracks) {
       console.warn("Could not backtrack.")
       break
     }
     // debugField(currentField, chosenPosition)
   }
 
-  if (entropyFn(currentField).length !== 0) {
-    throw new Error("Field was not fully collapsed!")
+  const remainingCandidates = generateCollapseCandidates(currentField)
+  if (remainingCandidates.length !== 0) {
+    throw new Error(`Field was not fully collapsed! ${remainingCandidates.length} candidates remain.`)
   } else {
     console.log("Field fully collapsed.")
     // debugField(currentField)
@@ -244,10 +303,10 @@ function validNeighbourPossibility(possibility, edge, neighbourPossibility) {
   const neighbourEdge = oppositeEdge(edge)
   const color = edgesForVariant(possibility.variant, possibility.topEdge)[edge]
   const neighbourColor = edgesForVariant(neighbourPossibility.variant, neighbourPossibility.topEdge)[neighbourEdge]
-  return color === neighbourColor
+  return color === COLOR0 || neighbourColor === COLOR0 || color === neighbourColor
 }
 
-function fullyCollapseFieldOnPosition(field, position, possibility) {
+function fullyCollapseFieldOnPosition(field, { position, possibility }) {
   let currentField = {
     ...field,
     [positionToKey(position)]: [possibility]
@@ -256,6 +315,7 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
 
   // Propagation
   function propagateStep(field, position) {
+    // console.debug("PROPAGATING", field, position)
     const neighboursToPropagate = neighbouringPositions(field, position)
     let currentField = field
     // console.debug(`Visiting position`, positionToKey(position))
@@ -298,11 +358,11 @@ function fullyCollapseFieldOnPosition(field, position, possibility) {
   return currentField
 }
 
-function collapseFieldToSingleVariantOnPosition(field, position, possibility) {
-  const possibilities = field[positionToKey(position)].filter(p => p.variant === possibility.variant)
-  const collapsedFields = possibilities.map(p => fullyCollapseFieldOnPosition(field, position, p))
+function collapseFieldToSingleVariantOnPosition(field, { position, variant }) {
+  const possibilities = field[positionToKey(position)].filter(p => p.variant === variant)
+  const collapsedFields = possibilities.map(possibility => fullyCollapseFieldOnPosition(field, { position, possibility }))
   // Returns field
-  return collapsedFields.reduce((field1, field2) => mergeFields(field1, field2))
+  return collapsedFields.reduce((field1, field2) => mergeFields(field1, field2), field)
 }
 
 function mergeFields(field1, field2) {
@@ -512,7 +572,7 @@ function drawFieldPossibilities(position, possibilities) {
   ctx.save()
 
   const center = hexTo2d(position)
-  const allPossibilitiesCount = Object.keys(VARIANTS_TO_EDGES).length * EDGES
+  const allPossibilitiesCount = Object.keys(DRAWN_VARIANTS_TO_EDGES).length * EDGES
   const angleDelta = 2 * Math.PI / allPossibilitiesCount
 
   ctx.beginPath()
@@ -555,6 +615,7 @@ function drawTile(tile, rotationAngle = 0) {
 
 function drawHexagon(center, edges, radius, rotationAngle) {
   const niceColors = {
+    [COLOR0]: 'transparent',
     [COLOR1]: '#3d184e',
     [COLOR2]: '#2e97a9',
     [COLOR3]: '#2a496e',
@@ -649,7 +710,7 @@ function restart() {
   if (state.tiles.length > 0) {
     // Transition
     const startTiles = state.tiles
-    const collapsedField = collapseField(state.field, fullyCollapseFieldOnPosition, lowestPossibilityEntropyPosition)
+    const collapsedField = collapseField(state.field, fullyCollapseFieldOnPosition, generatePossibilityCollapseCandidates)
     const endTiles = collapsedFieldToTiles(collapsedField)
     drawTransition(startTiles, endTiles, () => {
       state.tiles = endTiles
@@ -657,9 +718,9 @@ function restart() {
   } else {
     // Initial tiles
     const initialField = fullField(Object.keys(VARIANTS_TO_EDGES), POSITIONS)
-    const field = collapseField(initialField, collapseFieldToSingleVariantOnPosition, lowestVariantEntropyPosition)
+    const field = collapseField(initialField, collapseFieldToSingleVariantOnPosition, generateVariantCollapseCandidates)
     // debugField(field)
-    const collapsedField = collapseField(field, fullyCollapseFieldOnPosition, lowestPossibilityEntropyPosition)
+    const collapsedField = collapseField(field, fullyCollapseFieldOnPosition, generatePossibilityCollapseCandidates)
     const tiles = collapsedFieldToTiles(collapsedField)
     state.field = field
     // state.field = {}
@@ -678,3 +739,5 @@ function test() {
   console.log("Test ended")
 }
 restart();
+
+// {"[-1,0,1]":[{"variant":"112211","topEdge":2},{"variant":"112211","topEdge":1},{"variant":"112211","topEdge":3},{"variant":"112211","topEdge":4},{"variant":"112211","topEdge":5},{"variant":"112211","topEdge":0}],"[-1,1,0]":[{"variant":"112211","topEdge":0},{"variant":"112211","topEdge":1},{"variant":"112211","topEdge":5},{"variant":"112211","topEdge":3},{"variant":"112211","topEdge":4},{"variant":"112211","topEdge":2}],"[0,-1,1]":[{"variant":"112211","topEdge":0},{"variant":"112211","topEdge":5},{"variant":"112211","topEdge":4},{"variant":"112211","topEdge":3},{"variant":"112211","topEdge":1},{"variant":"112211","topEdge":2}],"[0,0,0]":[{"variant":"122222","topEdge":3},{"variant":"122222","topEdge":5},{"variant":"122222","topEdge":1},{"variant":"122222","topEdge":2},{"variant":"122222","topEdge":0},{"variant":"122222","topEdge":4}],"[0,1,-1]":[{"variant":"112211","topEdge":0},{"variant":"112211","topEdge":5},{"variant":"112211","topEdge":1},{"variant":"112211","topEdge":2},{"variant":"112211","topEdge":3},{"variant":"112211","topEdge":4}],"[1,-1,0]":[{"variant":"122222","topEdge":2},{"variant":"122222","topEdge":0},{"variant":"122222","topEdge":3},{"variant":"122222","topEdge":4},{"variant":"122222","topEdge":5},{"variant":"122222","topEdge":1}],"[1,0,-1]":[{"variant":"122222","topEdge":0},{"variant":"122222","topEdge":4},{"variant":"122222","topEdge":5},{"variant":"122222","topEdge":1},{"variant":"122222","topEdge":2},{"variant":"122222","topEdge":3}]}
