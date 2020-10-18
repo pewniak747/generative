@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 200;
+const unitLength = 100;
 const tileRadius = 0.5
 let DEBUG = false;
 
@@ -72,7 +72,7 @@ const VARIANTS_TO_EDGES = {
 }
 */
 
-const span = rangeInclusive(-2, 2)
+const span = rangeInclusive(-3, 3)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
 
 function freeze(obj) {
@@ -430,7 +430,8 @@ function collapsedFieldToTiles(field) {
 
 const state = {
   tiles: [],
-  field: {}
+  field: {},
+  transitioning: false
 };
 
 // Positioning
@@ -492,32 +493,37 @@ function drawTransition(startTiles_, endTiles_, done) {
   const endTiles = endTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
 
   const firstFrameAt = performance.now()
-  const tileDelay = 100 // ms
-  const tileAnimationLength = 500 // ms
-  const animationLength = tileAnimationLength * 5
+  const tileDelay = 250 // ms
+  const edgeTurnAnimationLength = 500 // ms
   function drawAnimationFrame(timestamp) {
-    // console.log("Animation frame")
-    const timeProgress = clamp(0, animationLength, timestamp - firstFrameAt)
-    const progress = timeProgress / animationLength
+    console.log("Animation frame")
+    let animating = false
 
-    if (progress <= 1) {
-      clearCanvas()
-      for (let i = 0; i < endTiles.length; i += 1) {
-        const startTile = startTiles[i]
-        const endTile = endTiles[i]
-        const tileDistanceFromCenter = Math.max(...endTile.position.map(coordinate => Math.abs(coordinate)))
-        const tileProgress = clamp(0, 1, (timeProgress - tileDistanceFromCenter * tileDelay) / tileAnimationLength)
-        let edgeDiff = (endTile.topEdge - startTile.topEdge) % EDGES
-        if (Math.abs(edgeDiff) > EDGES / 2) edgeDiff -= Math.sign(edgeDiff) * EDGES // Always choose the shortest rotation
-        const angle = (1 - tileProgress) * (edgeDiff / EDGES) * 2 * Math.PI
-        // console.log("Rotating tile", endTile.topEdge, startTile.topEdge, edgeDiff, angle)
-        drawTile(endTile, angle)
+    clearCanvas()
+    for (let i = 0; i < endTiles.length; i += 1) {
+      const startTile = startTiles[i]
+      const endTile = endTiles[i]
+      const tileDistanceFromCenter = Math.max(...endTile.position.map(coordinate => Math.abs(coordinate)))
+      let edgeTurns = (endTile.topEdge - startTile.topEdge) % EDGES
+      if (Math.abs(edgeTurns) > EDGES / 2) edgeTurns -= Math.sign(edgeTurns) * EDGES // Always choose the shortest rotation
+      const tileAnimationStart = firstFrameAt + tileDistanceFromCenter * tileDelay;
+      const tileAnimationLength = Math.abs(edgeTurns) * edgeTurnAnimationLength
+      const tileProgress = clamp(0, 1, (timestamp - tileAnimationStart) / tileAnimationLength)
+      // const easedTileProgress = easeOutElastic(tileProgress)
+      const easedTileProgress = easeInOutBack(tileProgress)
+      // console.debug(firstFrameAt, tileAnimationStart, timestamp)
+      const angle = (1 - easedTileProgress) * (edgeTurns / EDGES) * 2 * Math.PI
+      // console.debug("Rotating tile progress", edgeTurns, tileProgress, easedTileProgress)
+      drawTile(endTile, angle)
+      if (tileProgress < 1) {
+        animating = true
       }
+    }
 
-      if (progress < 1) {
-        requestAnimationFrame(drawAnimationFrame)
-      }
+    if (animating) {
+      requestAnimationFrame(drawAnimationFrame)
     } else {
+      console.log("Done animating.")
       done()
     }
   }
@@ -529,8 +535,28 @@ function drawTransition(startTiles_, endTiles_, done) {
   state.tiles.forEach(tile => {
     drawTile(tile)
   })
+}
 
-  done()
+// https://easings.net/#easeOutElastic
+function easeOutElastic(x) {
+  const c4 = (2 * Math.PI) / 2;
+  return x === 0
+    ? 0
+    : x === 1
+      ? 1
+      : Math.pow(5, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+
+}
+
+// https://easings.net/#easeInOutBack
+function easeInOutBack(x) {
+  const c1 = 1.70158;
+  const c2 = c1 * 1.525;
+
+  return x < 0.5
+    ? (Math.pow(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2
+    : (Math.pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2;
+
 }
 
 function clearCanvas() {
@@ -621,7 +647,7 @@ function drawHexagon(center, edges, radius, rotationAngle) {
     [COLOR3]: '#2a496e',
   }
   const centerColor = '#eee'
-  const sidesExtent = 0.999
+  const sidesExtent = 1.0
   ctx.save();
 
   ctx.beginPath();
@@ -707,13 +733,20 @@ window.addEventListener('resize', () => draw());
 canvas.addEventListener('click', handleCanvasClick);
 
 function restart() {
+  if (state.transitioning) {
+    console.log("Ignored restart during transition.")
+    return
+  }
+
   if (state.tiles.length > 0) {
     // Transition
     const startTiles = state.tiles
     const collapsedField = collapseField(state.field, fullyCollapseFieldOnPosition, generatePossibilityCollapseCandidates)
     const endTiles = collapsedFieldToTiles(collapsedField)
+    state.transitioning = true
     drawTransition(startTiles, endTiles, () => {
       state.tiles = endTiles
+      state.transitioning = false
     })
   } else {
     // Initial tiles
