@@ -12,10 +12,9 @@ const COLOR4 = "4"
 
 const EDGES = 6
 
-const COLORS = [COLOR0, COLOR1, COLOR2, COLOR3]
+const COLORS = [COLOR1, COLOR2]
 
 const allEdges = COLORS.map(c1 => COLORS.map(c2 => COLORS.map(c3 => COLORS.map(c4 => COLORS.map(c5 => COLORS.map(c6 => [c1, c2, c3, c4, c5, c6])))))).flat(5)
-console.log(allEdges)
 
 const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
   const newEdges = rangeInclusive(0, EDGES - 1).map(edge => rotateEdges(edges, edge)).map(edges => edges.join('')).every(key => !acc[key])
@@ -32,14 +31,13 @@ const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
     return acc
   }
 }, {})
-console.log(ALL_VARIANTS_TO_EDGES)
 console.log("Variants count:", Object.keys(ALL_VARIANTS_TO_EDGES).length)
 
 const EMPTY_POSSIBILITY = { variant: '000000', topEdge: 0 }
 
 const VARIANTS_TO_EDGES = {
   ...ALL_VARIANTS_TO_EDGES,
-  [EMPTY_POSSIBILITY.variant]: [COLOR0, COLOR0, COLOR0, COLOR0, COLOR0, COLOR0]
+  // [EMPTY_POSSIBILITY.variant]: [COLOR0, COLOR0, COLOR0, COLOR0, COLOR0, COLOR0]
 }
 
 const DRAWN_VARIANTS_TO_EDGES = {
@@ -270,7 +268,7 @@ function collapseField(initialField, collapseFieldOnCandidate, generateCollapseC
       console.warn("Could not backtrack.")
       break
     }
-    // debugField(currentField, chosenPosition)
+    // debugField(currentField)
   }
 
   const remainingCandidates = generateCollapseCandidates(currentField)
@@ -311,14 +309,22 @@ function neighbourEdge(position, neighbour) {
   console.error("Positions are not neighbours!", position, neighbour)
 }
 
-function validNeighbourPossibility(possibility, edge, neighbourPossibility) {
-  const neighbourEdge = oppositeEdge(edge)
-  const color = edgesForVariant(possibility.variant, possibility.topEdge)[edge]
-  const neighbourColor = edgesForVariant(neighbourPossibility.variant, neighbourPossibility.topEdge)[neighbourEdge]
+function validNeighbourColor(color, neighbourColor) {
   // return true
   // return color === neighbourColor
   return color === COLOR0 || neighbourColor === COLOR0 || color === neighbourColor
   // return (color === COLOR0 && neighbourColor === COLOR0) || (color !== COLOR0 && neighbourColor !== COLOR0)
+}
+
+function filterValidPossibilities(possibilities, edge, neighbourPossibilities) {
+  const reverseEdge = oppositeEdge(edge)
+  const neighbourColors = Array.from(new Set(neighbourPossibilities.map(possibility =>
+    edgesForVariant(possibility.variant, possibility.topEdge)[reverseEdge]
+  )))
+  return possibilities.filter(possibility => {
+    const color = edgesForVariant(possibility.variant, possibility.topEdge)[edge]
+    return neighbourColors.some(neighbourColor => validNeighbourColor(color, neighbourColor))
+  })
 }
 
 function fullyCollapseFieldOnPosition(field, { position, possibility }) {
@@ -350,8 +356,9 @@ function propagateStep(field, position) {
     const reverseEdge = neighbourEdge(neighbour, position)
     const possibilities = currentField[positionToKey(position)]
     const neighbourPossibilities = currentField[positionToKey(neighbour)]
-    const validPossibilities = possibilities.filter(p => neighbourPossibilities.some(np => validNeighbourPossibility(np, reverseEdge, p)))
-    const validNeighbourPossibilities = neighbourPossibilities.filter(np => possibilities.some(p => validNeighbourPossibility(p, edge, np)))
+    // console.log(possibilities.length, neighbourPossibilities.length)
+    const validPossibilities = filterValidPossibilities(possibilities, edge, neighbourPossibilities)
+    const validNeighbourPossibilities = filterValidPossibilities(neighbourPossibilities, reverseEdge, possibilities)
     // console.debug(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
     // console.debug(`And reverse edge ${reverseEdge}: ${positionToKey(neighbour)} -> ${positionToKey(position)}`)
     if (validPossibilities.length < possibilities.length || validNeighbourPossibilities.length < neighbourPossibilities.length) {
@@ -611,7 +618,7 @@ function drawField(field) {
     const center = hexTo2d(position)
     ctx.save()
     ctx.textAlign = 'center'
-    ctx.fillText(positionToKey(position), x(center.x), y(center.y))
+    ctx.fillText(positionToKey(position) + " (" + possibilities.length + ")", x(center.x), y(center.y))
     ctx.restore()
   })
 
