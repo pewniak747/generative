@@ -12,15 +12,18 @@ const COLOR4 = "4"
 
 const EDGES = 6
 
-const COLORS = [COLOR1, COLOR2]
+const COLORS = [COLOR0, COLOR1, COLOR2, COLOR3]
 
 const allEdges = COLORS.map(c1 => COLORS.map(c2 => COLORS.map(c3 => COLORS.map(c4 => COLORS.map(c5 => COLORS.map(c6 => [c1, c2, c3, c4, c5, c6])))))).flat(5)
 console.log(allEdges)
 
 const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
-  const newEdges = rangeInclusive(1, EDGES).map(edge => rotateEdges(edges, edge)).map(edges => edges.join('')).every(key => !acc[key])
+  const newEdges = rangeInclusive(0, EDGES - 1).map(edge => rotateEdges(edges, edge)).map(edges => edges.join('')).every(key => !acc[key])
   const sameEdges = new Set(edges).size === 1
-  if (newEdges && !sameEdges) {
+  const emptyEdges = edges.filter(color => color === COLOR0).length
+  const lonelyEdges = Object.values(edges.reduce((acc, color) => color === COLOR0 ? acc : { ...acc, [color]: (acc[color] || 0) + 1 })).every(count => count > 1)
+  const accepted = newEdges && !sameEdges && emptyEdges < 3 && !lonelyEdges
+  if (accepted) {
     return {
       ...acc,
       [edges.join('')]: edges
@@ -30,7 +33,7 @@ const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
   }
 }, {})
 console.log(ALL_VARIANTS_TO_EDGES)
-console.log(Object.keys(ALL_VARIANTS_TO_EDGES).length)
+console.log("Variants count:", Object.keys(ALL_VARIANTS_TO_EDGES).length)
 
 const EMPTY_POSSIBILITY = { variant: '000000', topEdge: 0 }
 
@@ -72,7 +75,7 @@ const VARIANTS_TO_EDGES = {
 }
 */
 
-const span = rangeInclusive(-3, 3)
+const span = rangeInclusive(-2, 2)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
 
 function freeze(obj) {
@@ -87,10 +90,19 @@ function validPosition(position) {
   return position[0] + position[1] + position[2] === 0
 }
 
+const edgesForVariantCache = new Map()
 function edgesForVariant(variant, topEdge) {
-  const edges = DRAWN_VARIANTS_TO_EDGES[variant]
-  return rotateEdges(edges, topEdge)
+  return edgesForVariantCache.get(variant)[topEdge]
 }
+
+// Preload edgesForVariant cache
+Object.keys(DRAWN_VARIANTS_TO_EDGES).forEach(variant => {
+  const edges = DRAWN_VARIANTS_TO_EDGES[variant]
+  const edgesByTopEdge = rangeInclusive(0, EDGES - 1).map(topEdge => {
+    return rotateEdges(edges, topEdge)
+  })
+  edgesForVariantCache.set(variant, edgesByTopEdge)
+})
 
 function rotateEdges(edges, topEdge) {
   return edges.slice(topEdge, EDGES).concat(edges.slice(0, Math.max(0, topEdge)))
@@ -303,7 +315,10 @@ function validNeighbourPossibility(possibility, edge, neighbourPossibility) {
   const neighbourEdge = oppositeEdge(edge)
   const color = edgesForVariant(possibility.variant, possibility.topEdge)[edge]
   const neighbourColor = edgesForVariant(neighbourPossibility.variant, neighbourPossibility.topEdge)[neighbourEdge]
+  // return true
+  // return color === neighbourColor
   return color === COLOR0 || neighbourColor === COLOR0 || color === neighbourColor
+  // return (color === COLOR0 && neighbourColor === COLOR0) || (color !== COLOR0 && neighbourColor !== COLOR0)
 }
 
 function fullyCollapseFieldOnPosition(field, { position, possibility }) {
@@ -311,51 +326,54 @@ function fullyCollapseFieldOnPosition(field, { position, possibility }) {
     ...field,
     [positionToKey(position)]: [possibility]
   }
-  const positionsToVisit = [position]
-
-  // Propagation
-  function propagateStep(field, position) {
-    // console.debug("PROPAGATING", field, position)
-    const neighboursToPropagate = neighbouringPositions(field, position)
-    let currentField = field
-    // console.debug(`Visiting position`, positionToKey(position))
-    // console.debug(`Propagating to ${neighboursToPropagate.length} neighbours.`, neighboursToPropagate)
-    neighboursToPropagate.forEach(neighbour => {
-      const edge = neighbourEdge(position, neighbour)
-      const reverseEdge = neighbourEdge(neighbour, position)
-      const possibilities = currentField[positionToKey(position)]
-      const neighbourPossibilities = currentField[positionToKey(neighbour)]
-      const validPossibilities = possibilities.filter(p => neighbourPossibilities.some(np => validNeighbourPossibility(np, reverseEdge, p)))
-      const validNeighbourPossibilities = neighbourPossibilities.filter(np => possibilities.some(p => validNeighbourPossibility(p, edge, np)))
-      // console.debug(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
-      // console.debug(`And reverse edge ${reverseEdge}: ${positionToKey(neighbour)} -> ${positionToKey(position)}`)
-      if (validPossibilities.length < possibilities.length || validNeighbourPossibilities.length < neighbourPossibilities.length) {
-        // console.debug("Found changes", validPossibilities, neighbourPossibilities)
-        currentField = {
-          ...currentField,
-          [positionToKey(position)]: validPossibilities,
-          [positionToKey(neighbour)]: validNeighbourPossibilities
-        }
-        if (validPossibilities.length < possibilities.length) {
-          positionsToVisit.push(position)
-        }
-        if (validNeighbourPossibilities.length < neighbourPossibilities.length) {
-          positionsToVisit.push(neighbour)
-        }
-      } else {
-        // console.debug("No changes")
-      }
-      // debugField(currentField, position, neighbour)
-    })
-
-    return currentField
-  }
+  let positionsToVisit = [position]
 
   while (positionsToVisit.length > 0) {
-    currentField = propagateStep(currentField, positionsToVisit.shift())
+    const { field, positionsToVisit: newPositionsToVisit } = propagateStep(currentField, positionsToVisit.shift())
+    currentField = field
+    positionsToVisit = positionsToVisit.concat(newPositionsToVisit)
   }
   // Returns field
   return currentField
+}
+
+// Propagation
+function propagateStep(field, position) {
+  const positionsToVisit = []
+  // console.debug("PROPAGATING", field, position)
+  const neighboursToPropagate = neighbouringPositions(field, position)
+  let currentField = field
+  // console.debug(`Visiting position`, positionToKey(position))
+  // console.debug(`Propagating to ${neighboursToPropagate.length} neighbours.`, neighboursToPropagate)
+  neighboursToPropagate.forEach(neighbour => {
+    const edge = neighbourEdge(position, neighbour)
+    const reverseEdge = neighbourEdge(neighbour, position)
+    const possibilities = currentField[positionToKey(position)]
+    const neighbourPossibilities = currentField[positionToKey(neighbour)]
+    const validPossibilities = possibilities.filter(p => neighbourPossibilities.some(np => validNeighbourPossibility(np, reverseEdge, p)))
+    const validNeighbourPossibilities = neighbourPossibilities.filter(np => possibilities.some(p => validNeighbourPossibility(p, edge, np)))
+    // console.debug(`Propagating alongside edge ${edge}: ${positionToKey(position)} -> ${positionToKey(neighbour)}`)
+    // console.debug(`And reverse edge ${reverseEdge}: ${positionToKey(neighbour)} -> ${positionToKey(position)}`)
+    if (validPossibilities.length < possibilities.length || validNeighbourPossibilities.length < neighbourPossibilities.length) {
+      // console.debug("Found changes", validPossibilities, neighbourPossibilities)
+      currentField = {
+        ...currentField,
+        [positionToKey(position)]: validPossibilities,
+        [positionToKey(neighbour)]: validNeighbourPossibilities
+      }
+      if (validPossibilities.length < possibilities.length) {
+        positionsToVisit.push(position)
+      }
+      if (validNeighbourPossibilities.length < neighbourPossibilities.length) {
+        positionsToVisit.push(neighbour)
+      }
+    } else {
+      // console.debug("No changes")
+    }
+    // debugField(currentField, position, neighbour)
+  })
+
+  return { field: currentField, positionsToVisit }
 }
 
 function collapseFieldToSingleVariantOnPosition(field, { position, variant }) {
@@ -371,6 +389,11 @@ function mergeFields(field1, field2) {
   Object.keys(field1).map(key => {
     const possibilities1 = field1[key]
     const possibilities2 = field2[key]
+    if (possibilities1 === possibilities2) {
+      // console.log("Performance optimization: possibilities haven't changed.")
+      resultField[key] = possibilities1
+      return
+    }
     const variants1 = new Set(possibilities1.map(p => p.variant))
     const variants2 = new Set(possibilities2.map(p => p.variant))
     const commonVariants = intersection(variants1, variants2)
@@ -395,7 +418,7 @@ function mergeFields(field1, field2) {
 }
 
 function possibilityToKey(possibility) {
-  return JSON.stringify(possibility)
+  return `${possibility.variant}:${possibility.topEdge}`
 }
 
 function intersection(setA, setB) {
