@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 100;
+const unitLength = 50;
 const tileRadius = 0.5
 let DEBUG = false;
 
@@ -12,7 +12,7 @@ const COLOR4 = "4"
 
 const EDGES = 6
 
-const COLORS = [COLOR1, COLOR2]
+const COLORS = [COLOR1, COLOR3]
 
 const allEdges = COLORS.map(c1 => COLORS.map(c2 => COLORS.map(c3 => COLORS.map(c4 => COLORS.map(c5 => COLORS.map(c6 => [c1, c2, c3, c4, c5, c6])))))).flat(5)
 
@@ -20,8 +20,11 @@ const ALL_VARIANTS_TO_EDGES = allEdges.reduce((acc, edges) => {
   const newEdges = rangeInclusive(0, EDGES - 1).map(edge => rotateEdges(edges, edge)).map(edges => edges.join('')).every(key => !acc[key])
   const sameEdges = new Set(edges).size === 1
   const emptyEdges = edges.filter(color => color === COLOR0).length
-  const lonelyEdges = Object.values(edges.reduce((acc, color) => color === COLOR0 ? acc : { ...acc, [color]: (acc[color] || 0) + 1 })).every(count => count > 1)
-  const accepted = newEdges && !sameEdges && emptyEdges < 3 && !lonelyEdges
+  const edgesCount = Object.values(edges.reduce((acc, color) => color === COLOR0 ? acc : { ...acc, [color]: (acc[color] || 0) + 1 }, {}))
+  const pairedEdges = edgesCount.every(count => count > 1)
+  const tripledEdges = edgesCount.every(count => count > 1)
+  // console.log(edges.join(''), pairedEdges, edgesCount)
+  const accepted = newEdges && !sameEdges && emptyEdges < 3 && pairedEdges && edgesCount.length === 2
   if (accepted) {
     return {
       ...acc,
@@ -36,7 +39,16 @@ console.log("Variants count:", Object.keys(ALL_VARIANTS_TO_EDGES).length)
 const EMPTY_POSSIBILITY = { variant: '000000', topEdge: 0 }
 
 const VARIANTS_TO_EDGES = {
-  ...ALL_VARIANTS_TO_EDGES,
+  // ...ALL_VARIANTS_TO_EDGES,
+  //'113311': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR1, COLOR1],
+  // '113331': [COLOR1, COLOR1, COLOR3, COLOR3, COLOR3, COLOR1],
+  // '111131': [COLOR1, COLOR1, COLOR1, COLOR1, COLOR3, COLOR1],
+  // '131131': [COLOR1, COLOR3, COLOR1, COLOR1, COLOR3, COLOR1],
+  '144141': [COLOR1, COLOR4, COLOR4, COLOR1, COLOR4, COLOR1],
+  '244242': [COLOR2, COLOR4, COLOR4, COLOR2, COLOR4, COLOR2],
+  '133131': [COLOR1, COLOR3, COLOR3, COLOR1, COLOR3, COLOR1],
+  '233232': [COLOR2, COLOR3, COLOR3, COLOR2, COLOR3, COLOR2],
+  // '133113': [COLOR1, COLOR3, COLOR3, COLOR1, COLOR1, COLOR3],
   // [EMPTY_POSSIBILITY.variant]: [COLOR0, COLOR0, COLOR0, COLOR0, COLOR0, COLOR0]
 }
 
@@ -73,7 +85,7 @@ const VARIANTS_TO_EDGES = {
 }
 */
 
-const span = rangeInclusive(-2, 2)
+const span = rangeInclusive(-8, 8)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
 
 function freeze(obj) {
@@ -182,7 +194,7 @@ function lowestVariantEntropyPosition(field) {
     const possibilities = field[key]
     const position = keyToPosition(key)
     const variants = new Set(possibilities.map(p => p.variant)).size
-    const entropy = variants <= 1 ? 0 : possibilities.length // TODO
+    const entropy = variants <= 1 ? 0 : variants // TODO
     return [position, entropy]
   })
     .filter(([_, entropy]) => entropy > 0)
@@ -220,7 +232,6 @@ function generateVariantCollapseCandidates(field) {
   const positionsByEntropy = lowestVariantEntropyPosition(field)
   const variantsByEntropy = positionsByEntropy.map(position => {
     const variants = field[positionToKey(position)]
-      .slice()
       .map(possibility => possibility.variant)
       .reduce((set, variant) => set.add(variant), new Set())
     return Array.from(variants)
@@ -240,21 +251,25 @@ function collapseField(initialField, collapseFieldOnCandidate, generateCollapseC
   let history = []
   for (let iteration = 0; iteration < fieldSize; iteration += 1) {
     const candidates = generateCollapseCandidates(currentField)
-    // console.log("CANDIDATES", candidates)
+    console.log("Candidates count:", candidates.length)
     if (candidates.length === 0) {
       break;
     }
     let candidate = null
     let backtracks = 0;
-    let maxBacktracks = candidates.length
+    const maxBacktracks = candidates.length
+    const alternativeLookahead = 0
     for (backtracks; backtracks < maxBacktracks; backtracks += 1) {
       candidate = candidates[backtracks]
+      // const variants = currentField[positionToKey(candidate.position)].filter(p => p.variant === candidate.variant)
+      // console.log(variants.length)
       // console.log("Collapsing:", candidate.position, candidate.possibility)
       const collapsedField = collapseFieldOnCandidate(currentField, candidate)
       if (validField(collapsedField)) {
+        const entropy = Object.values(collapsedField).filter(p => p.length > EDGES).map(p => p.length).reduce((a, b) => a + b, 0)
         currentField = freeze(collapsedField)
         history.push({ field: currentField, position: candidate.position })
-        console.log(`Collapsed ${iteration} / ${fieldSize} on ${positionToKey(candidate.position)}`)
+        console.log(`Collapsed ${iteration} / ${fieldSize} on ${positionToKey(candidate.position)}. Entropy: ${entropy}`)
         break;
       } else {
         console.log("Did not collapse to a valid field. Backtracking...")
@@ -276,7 +291,6 @@ function collapseField(initialField, collapseFieldOnCandidate, generateCollapseC
     throw new Error(`Field was not fully collapsed! ${remainingCandidates.length} candidates remain.`)
   } else {
     console.log("Field fully collapsed.")
-    // debugField(currentField)
   }
   return freeze(currentField);
 }
@@ -312,8 +326,13 @@ function neighbourEdge(position, neighbour) {
 function validNeighbourColor(color, neighbourColor) {
   // return true
   // return color === neighbourColor
-  return color === COLOR0 || neighbourColor === COLOR0 || color === neighbourColor
   // return (color === COLOR0 && neighbourColor === COLOR0) || (color !== COLOR0 && neighbourColor !== COLOR0)
+  // return color === COLOR0 || neighbourColor === COLOR0 || color === neighbourColor
+  return color === neighbourColor ||
+    (color === COLOR1 && neighbourColor === COLOR2) ||
+    (color === COLOR2 && neighbourColor === COLOR1) ||
+    (color === COLOR3 && neighbourColor === COLOR4) ||
+    (color === COLOR4 && neighbourColor === COLOR3)
 }
 
 function filterValidPossibilities(possibilities, edge, neighbourPossibilities) {
@@ -500,6 +519,8 @@ function handleCanvasClick(event) {
 }
 
 // Drawing
+const backgroundColor = '#fadcaa';
+
 function draw() {
   console.time('draw')
   if (DEBUG) {
@@ -591,8 +612,7 @@ function easeInOutBack(x) {
 
 function clearCanvas() {
   ctx.save();
-  ctx.fillStyle = '#fff';
-  ctx.fillStyle = '#f3fafb'
+  ctx.fillStyle = backgroundColor
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 }
@@ -666,18 +686,19 @@ function drawTile(tile, rotationAngle = 0) {
   const rotatedEdges = edgesForVariant(tile.variant, tile.topEdge)
   const center = hexTo2d(tile.position)
 
-  drawHexagon(center, rotatedEdges, tileRadius * 1.15, rotationAngle)
+  drawHexagon(center, rotatedEdges, tileRadius * 1.20, rotationAngle)
 }
 
 function drawHexagon(center, edges, radius, rotationAngle) {
   const niceColors = {
     [COLOR0]: 'transparent',
-    [COLOR1]: '#3d184e',
-    [COLOR2]: '#2e97a9',
-    [COLOR3]: '#2a496e',
+    [COLOR1]: '#794c74',// '#111',
+    [COLOR2]: '#c56183',// '#222',
+    [COLOR3]: 'transparent',//'#ccc',
+    [COLOR4]: 'transparent'// '#ddd'
   }
-  const centerColor = '#eee'
-  const sidesExtent = 1.0
+  const centerColor = backgroundColor
+  const sidesExtent = 0.5
   ctx.save();
 
   ctx.beginPath();
