@@ -515,7 +515,11 @@ function adjustCanvasSize() {
   canvas.height = height * devicePixelRatio;
 }
 function handleCanvasClick(event) {
-  restart();
+  const clickCoordinates = {
+    x: invertX(event.x),
+    y: invertY(event.y)
+  }
+  restart(clickCoordinates);
 }
 
 // Drawing
@@ -539,7 +543,7 @@ function draw() {
   console.timeEnd('draw')
 }
 
-function drawTransition(startTiles_, endTiles_, done) {
+function drawTransition(startTiles_, endTiles_, clickCoordinates, done) {
   const startTiles = startTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
   const endTiles = endTiles_.sort((a, b) => positionToKey(a.position).localeCompare(positionToKey(b.position)))
 
@@ -554,10 +558,10 @@ function drawTransition(startTiles_, endTiles_, done) {
     for (let i = 0; i < endTiles.length; i += 1) {
       const startTile = startTiles[i]
       const endTile = endTiles[i]
-      const tileDistanceFromCenter = Math.max(...endTile.position.map(coordinate => Math.abs(coordinate)))
+      const tileDistance = distance2d(clickCoordinates, hexTo2d(endTile.position))
       let edgeTurns = (endTile.topEdge - startTile.topEdge) % EDGES
       if (Math.abs(edgeTurns) > EDGES / 2) edgeTurns -= Math.sign(edgeTurns) * EDGES // Always choose the shortest rotation
-      const tileAnimationStart = firstFrameAt + tileDistanceFromCenter * tileDelay;
+      const tileAnimationStart = firstFrameAt + tileDistance * tileDelay;
       const tileAnimationLength = Math.abs(edgeTurns) * edgeTurnAnimationLength
       const tileProgress = clamp(0, 1, (timestamp - tileAnimationStart) / tileAnimationLength)
       // const easedTileProgress = easeOutElastic(tileProgress)
@@ -756,7 +760,7 @@ function rotateClockwise(pos, origin, angle) {
   return plus(rotated, origin);
 }
 
-function distance2d([x1, y1], [x2, y2]) {
+function distance2d({ x: x1, y: y1 }, { x: x2, y: y2 }) {
   return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
 }
 
@@ -783,7 +787,7 @@ window.addEventListener('resize', () => adjustCanvasSize());
 window.addEventListener('resize', () => draw());
 canvas.addEventListener('click', handleCanvasClick);
 
-function restart() {
+function restart(clickCoordinates = { x: 0, y: 0 }) {
   if (state.transitioning) {
     console.log("Ignored restart during transition.")
     return
@@ -795,7 +799,7 @@ function restart() {
     const collapsedField = collapseField(state.field, fullyCollapseFieldOnPosition, generatePossibilityCollapseCandidates)
     const endTiles = collapsedFieldToTiles(collapsedField)
     state.transitioning = true
-    drawTransition(startTiles, endTiles, () => {
+    drawTransition(startTiles, endTiles, clickCoordinates, () => {
       state.tiles = endTiles
       state.transitioning = false
     })
