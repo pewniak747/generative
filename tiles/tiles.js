@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 50;
+const unitLength = Math.max(Math.floor(document.body.clientWidth / 10), Math.floor(document.body.clientHeight) / 10) // 200;
 const tileRadius = 0.5
 let DEBUG = false;
 
@@ -85,7 +85,7 @@ const VARIANTS_TO_EDGES = {
 }
 */
 
-const span = rangeInclusive(-8, 8)
+const span = rangeInclusive(-10, 10)
 const POSITIONS = span.map(a => span.map(b => span.map(c => [a, b, c]))).flat().flat().filter(validPosition)// [[0, 0, 0], [0, -1, 1], [1, -1, 0], [1, 0, -1]]
 
 function freeze(obj) {
@@ -524,6 +524,13 @@ function handleCanvasClick(event) {
 
 // Drawing
 const backgroundColor = '#fadcaa';
+const edgeColors = {
+  [COLOR0]: 'transparent',
+  [COLOR1]: '#794c74',// '#111',
+  [COLOR2]: '#c56183',// '#222',
+  [COLOR3]: '#f8ce87',//'#ccc',
+  [COLOR4]: '#f7c56e'// '#ddd'
+}
 
 function draw() {
   console.time('draw')
@@ -690,18 +697,14 @@ function drawTile(tile, rotationAngle = 0) {
   const rotatedEdges = edgesForVariant(tile.variant, tile.topEdge)
   const center = hexTo2d(tile.position)
 
-  drawHexagon(center, rotatedEdges, tileRadius * 1.20, rotationAngle)
+  drawSmoothHexagon(center, rotatedEdges, tileRadius * 1.20, rotationAngle)
 }
 
 function drawHexagon(center, edges, radius, rotationAngle) {
-  const niceColors = {
-    [COLOR0]: 'transparent',
-    [COLOR1]: '#794c74',// '#111',
-    [COLOR2]: '#c56183',// '#222',
-    [COLOR3]: 'transparent',//'#ccc',
-    [COLOR4]: 'transparent'// '#ddd'
-  }
-  const centerColor = backgroundColor
+  const centerEdgeColor1 = edges.filter(c => c === COLOR1 || c === COLOR2)[0]
+  const centerEdgeColor2 = edges.filter(c => c === COLOR3 || c === COLOR4)[0]
+  const centerEdgeColor = Math.floor(center.x + center.y) % 2 === 0 ? centerEdgeColor1 : centerEdgeColor2
+  const centerColor = edgeColors[centerEdgeColor]//backgroundColor
   const sidesExtent = 0.5
   ctx.save();
 
@@ -720,7 +723,7 @@ function drawHexagon(center, edges, radius, rotationAngle) {
     const endPoint = rotateClockwise(topPoint, center, angleEnd)
     const startBottomPoint = rotateClockwise(bottomPoint, center, angleStart)
     const endBottomPoint = rotateClockwise(bottomPoint, center, angleEnd)
-    const niceColor = niceColors[color] || color
+    const edgeColor = edgeColors[color] || color
 
     ctx.save();
     ctx.beginPath()
@@ -729,8 +732,8 @@ function drawHexagon(center, edges, radius, rotationAngle) {
     ctx.lineTo(x(endBottomPoint.x), y(endBottomPoint.y))
     ctx.lineTo(x(startBottomPoint.x), y(startBottomPoint.y))
     ctx.closePath()
-    ctx.fillStyle = niceColor
-    ctx.strokeStyle = niceColor // "#333"
+    ctx.fillStyle = edgeColor
+    ctx.strokeStyle = edgeColor // "#333"
     ctx.fill()
     ctx.stroke()
     ctx.restore();
@@ -738,7 +741,95 @@ function drawHexagon(center, edges, radius, rotationAngle) {
   })
 
   ctx.restore();
+}
 
+function drawSmoothHexagon(center, edges, radius, rotationAngle) {
+  // const topColors = Math.floor(center.x + center.y) % 2 === 0 ? '1234' : '3412'
+  const topColors = '4321'
+  const uniqueColors = Array.from(new Set(edges)).sort((a, b) => topColors.indexOf(a) - topColors.indexOf(b))
+  const centerEdgeColor = Math.floor(center.x + center.y) % 2 === 0 ? uniqueColors[0] : uniqueColors[1]
+  const sidesExtent = 0.5
+  ctx.save();
+  uniqueColors.slice().reverse().forEach(drawnColor => {
+    let path = []
+    edges.forEach((color, rotation) => {
+      const angleStart = rotationAngle + (rotation - 0.5) / EDGES * 2 * Math.PI;
+      const angleEnd = rotationAngle + (rotation + 0.5) / EDGES * 2 * Math.PI;
+
+      const topPoint = { x: center.x, y: center.y + radius }
+      const bottomPoint = { x: center.x, y: center.y + radius * (1 - sidesExtent) }
+      const startBottomPoint = rotateClockwise(bottomPoint, center, angleStart)
+      const endBottomPoint = rotateClockwise(bottomPoint, center, angleEnd)
+
+      const previousColor = edges[(rotation - 1 + EDGES) % EDGES]
+      const nextColor = edges[(rotation + 1) % EDGES]
+      if (color === drawnColor) {
+        const startPoint = rotateClockwise(topPoint, center, angleStart)
+        const endPoint = rotateClockwise(topPoint, center, angleEnd)
+        // ctx.lineTo(x(startPoint.x), y(startPoint.y))
+        //ctx.lineTo(x(endPoint.x), y(endPoint.y))
+        path.push({ type: 'line', start: startPoint, end: endPoint })
+      } else if (nextColor === drawnColor && previousColor === drawnColor) {
+        const arcCenter = rotateClockwise({ x: center.x, y: center.y + radius * (2 / Math.sqrt(3)) }, center, rotationAngle + (rotation / EDGES * 2 * Math.PI), true)
+        const angleStart = rotationAngle + (rotation + 2.5) / EDGES * 2 * Math.PI
+        const angleEnd = rotationAngle + (rotation + 0.5) / EDGES * 2 * Math.PI
+        path.push({ type: 'arc', center: arcCenter, radius: radius * (1 / Math.sqrt(3)), angleStart, angleEnd })
+        /*
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(arcCenter.x), y(arcCenter.y), 10, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.fillStyle = edgeColors[drawnColor]
+        ctx.fill()
+        ctx.restore()
+        */
+      } else if (previousColor === drawnColor && nextColor !== drawnColor) {
+        // skip
+      } else if (previousColor !== drawnColor && nextColor === drawnColor) {
+        const arcCenter = rotateClockwise({ x: center.x, y: center.y + radius * 2 }, center, rotationAngle + ((rotation - 0.5) / EDGES * 2 * Math.PI), true)
+        const angleStart = rotationAngle + (rotation + 1.5) / EDGES * 2 * Math.PI
+        const angleEnd = rotationAngle + (rotation + 0.5) / EDGES * 2 * Math.PI
+        path.push({ type: 'arc', center: arcCenter, radius: radius * Math.sqrt(3), angleStart, angleEnd })
+        /*
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(x(arcCenter.x), y(arcCenter.y), 10, 0, 2 * Math.PI)
+        ctx.closePath()
+        ctx.fillStyle = edgeColors[drawnColor]
+        ctx.fill()
+        ctx.restore()
+        */
+      } else {
+        // ctx.lineTo(x(startBottomPoint.x), y(startBottomPoint.y))
+        // ctx.lineTo(x(endBottomPoint.x), y(endBottomPoint.y))
+        path.push({ type: 'line', start: startBottomPoint, end: endBottomPoint })
+      }
+      // ctx.lineTo(x(endBottomPoint.x), y(endBottomPoint.y))
+      // ctx.lineTo(x(startBottomPoint.x), y(startBottomPoint.y))
+    })
+
+    ctx.save();
+    ctx.beginPath()
+    path.forEach(segment => {
+      if (segment.type === 'line') {
+        ctx.lineTo(x(segment.start.x), y(segment.start.y))
+        ctx.lineTo(x(segment.end.x), y(segment.end.y))
+      } else if (segment.type === 'arc') {
+        ctx.arc(x(segment.center.x), y(segment.center.y), scale(segment.radius), segment.angleStart, segment.angleEnd, true)
+      }
+    })
+    const edgeColor = edgeColors[drawnColor]
+    ctx.closePath()
+    ctx.fillStyle = edgeColor
+    ctx.strokeStyle = edgeColor // "#333"
+    // ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore();
+    // debugger;
+  })
+
+  ctx.restore();
 }
 
 function minus(pos1, pos2) {
