@@ -115,21 +115,22 @@ function breakLoops(loops, intersections) {
     let brokenLoop = loop
     const breakIntersections = intersections.filter(intersection => intersection.belowLoopIdx === loopIdx)
     console.log("INTERSECTIONS", breakIntersections)
-    breakIntersections.forEach(({ segment }) => {
-      brokenLoop = breakLoop(brokenLoop, segment)
+    breakIntersections.forEach((intersection) => {
+      brokenLoop = breakLoop(brokenLoop, intersection)
     })
     return brokenLoop
   })
 }
 
-function breakLoop(loop, intersectionSegment) {
-  const minDistance = 0.1
+function breakLoop(loop, intersection) {
+  const minSegmentDistance = 0.1
+  const maxPointDistance = 0.2
   return loop.map(segment => {
     const brokenSegments = []
     let brokenSegment = []
     for (let i = 0; i < segment.length; i += 1) {
       const point = segment[i]
-      if (!pointCloseToSegment(point, intersectionSegment, minDistance)) {
+      if (!pointCloseToSegment(point, intersection.segment, minSegmentDistance) || !pointCloseTo(point, intersection.point, maxPointDistance)) {
         brokenSegment.push(point)
       } else {
         if (brokenSegment.length) {
@@ -155,6 +156,32 @@ function pointCloseToSegment(point, segment, distance) {
 
 function pointCloseTo(point1, point2, distance) {
   return distance2d(point1, point2) < distance
+}
+
+function circlePack(numCircles, minNeighbors = 1, maxNeighbors = Infinity) {
+  const circles = []
+  const extent = 2
+  const minGap = 0.1
+  const maxGap = 0.15
+  let iterations = 0
+  for (let i = 0; i < numCircles;) {
+    iterations += 1
+    const x = extent * 2 * (Math.random() - 0.5)
+    const y = extent * 2 * (Math.random() - 0.5)
+    const radius = 0.3 + Math.random() * 0.2
+    const center = { x, y }
+    const valid = circles.every(c => !pointCloseTo(c.center, center, c.radius + radius + minGap))
+    const neighbors = circles.filter(c => !pointCloseTo(c.center, center, c.radius + radius + minGap) && pointCloseTo(c.center, center, c.radius + radius + maxGap))
+    if (circles.length === 0 || (valid && neighbors.length >= minNeighbors && neighbors.length <= maxNeighbors)) {
+      circles.push({ center, radius })
+      i += 1
+      iterations = 0
+    }
+    if (iterations > 1000) {
+      break
+    }
+  }
+  return circles;
 }
 
 // Drawing
@@ -218,7 +245,7 @@ function draw(scene) {
 
   intersectionPoints.forEach(({ point, segment }) => {
     // drawDebugPoint(point)
-    // drawDebugLine(segment, 'blue', [5, 30])
+    // drawDebugLine(segment, 'rgba(0, 0, 0, 0.05)', [5, 30])
   })
 
   console.timeEnd('draw')
@@ -339,7 +366,8 @@ function restart() {
     loop4
   ]
   */
-  const loops = Array(6).fill(null).map(() => generateCircleLoop({ x: 4 * (Math.random() - 0.5), y: 4 * (Math.random() - 0.5) }, 1 + Math.random()))
+  const packedCircles = circlePack(6, 1, 1)
+  const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.15))
   const intersectionPoints = calculateIntersectionPoints(loops)
   const brokenLoops = breakLoops(loops, intersectionPoints)
   draw({ loops: brokenLoops, intersectionPoints })
