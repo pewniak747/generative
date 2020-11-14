@@ -48,7 +48,7 @@ function handleCanvasClick(event) {
 // Logic
 
 function generateCircleLoop(center, radius) {
-  const resolution = 100
+  const resolution = 300
   const points = []
   for (let i = 0; i < resolution + 1; i += 1) {
     const angle = i / resolution * 2 * Math.PI
@@ -67,10 +67,10 @@ function calculateIntersectionPoints(loops) {
       const loop1 = loops[i]
       const loop2 = loops[l]
       const loopIntersectionPoints = calculateLoopsIntersectionPoints(loop1, loop2)
-      loopIntersectionPoints.forEach((point, pointIdx) => {
+      loopIntersectionPoints.forEach(((intersection, pointIdx) => {
         const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: l } : { belowLoopIdx: l, aboveLoopIdx: i }
-        intersectionPoints.push({ ...order, point })
-      })
+        intersectionPoints.push({ ...order, point: intersection.point, segment: intersection.segments[1 - pointIdx % 2] })
+      }))
     }
   }
 
@@ -78,48 +78,59 @@ function calculateIntersectionPoints(loops) {
 }
 
 function calculateLoopsIntersectionPoints(loop1, loop2) {
-  const intersectionPoints = []
-  loop1.forEach(segment => {
-    for (let i = 0; i < segment.length - 1; i += 1) {
-      const segment1 = segment.slice(i, i + 2)
-      loop2.forEach(segment => {
-        for (let l = 0; l < segment.length - 1; l += 1) {
-          const segment2 = segment.slice(l, l + 2)
+  const intersections = []
+  loop1.forEach(outerSegment => {
+    for (let i = 0; i < outerSegment.length - 1; i += 1) {
+      const segment1 = outerSegment.slice(i, i + 2)
+      loop2.forEach(innerSegment => {
+        for (let l = 0; l < innerSegment.length - 1; l += 1) {
+          const segment2 = innerSegment.slice(l, l + 2)
           const intersect = lineIntersectionPoint(segment1[0], segment1[1], segment2[0], segment2[1])
           if (intersect.segmentsIntersect) {
-            intersectionPoints.push({ x: intersect.x, y: intersect.y })
+            const intersectionSegments = [
+              loopSegmentCloseTo(outerSegment, intersect, 0.5),
+              loopSegmentCloseTo(innerSegment, intersect, 0.5)
+            ]
+            intersections.push({ point: { x: intersect.x, y: intersect.y }, segments: intersectionSegments })
           }
         }
       })
     }
   })
-  return intersectionPoints
+  return intersections
+}
+
+function loopSegmentCloseTo(segment, intersect, radius) {
+  const intersectionSegmentEnd = takeEnd(segment, point => pointCloseTo(point, intersect, radius))
+  const intersectionSegmentStart = takeStart(segment, point => pointCloseTo(point, intersect, radius))
+  if (intersectionSegmentStart.length === intersectionSegmentEnd.length && intersectionSegmentStart[0].x === intersectionSegmentEnd[0].x) {
+    return intersectionSegmentStart
+  } else {
+    return intersectionSegmentEnd.concat(intersectionSegmentStart)
+  }
 }
 
 function breakLoops(loops, intersections) {
   return loops.map((loop, loopIdx) => {
     let brokenLoop = loop
     const breakIntersections = intersections.filter(intersection => intersection.belowLoopIdx === loopIdx)
-    breakIntersections.forEach(({ point }) => {
-      brokenLoop = breakLoop(brokenLoop, point)
+    console.log("INTERSECTIONS", breakIntersections)
+    breakIntersections.forEach(({ segment }) => {
+      brokenLoop = breakLoop(brokenLoop, segment)
     })
     return brokenLoop
   })
 }
 
-function breakLoop(loop, point) {
-  const minRadius = 0.1
+function breakLoop(loop, intersectionSegment) {
+  const minDistance = 0.1
   return loop.map(segment => {
     const brokenSegments = []
     let brokenSegment = []
-    for (let i = 0; i < segment.length - 1; i += 1) {
-      const point1 = segment[i]
-      const point2 = segment[i + 1]
-      if (!circleIntersectsSegment(point1, point2, point, minRadius)) {
-        if (brokenSegment.length === 0) {
-          brokenSegment.push(point1)
-        }
-        brokenSegment.push(point2)
+    for (let i = 0; i < segment.length; i += 1) {
+      const point = segment[i]
+      if (!pointCloseToSegment(point, intersectionSegment, minDistance)) {
+        brokenSegment.push(point)
       } else {
         if (brokenSegment.length) {
           brokenSegments.push(brokenSegment)
@@ -136,6 +147,14 @@ function breakLoop(loop, point) {
 
 function circleIntersectsSegment(point1, point2, center, radius) {
   return distance2d(point1, center) < radius || distance2d(point2, center) < radius // FIXME
+}
+
+function pointCloseToSegment(point, segment, distance) {
+  return segment.some(segmentPoint => pointCloseTo(point, segmentPoint, distance)) // FIXME
+}
+
+function pointCloseTo(point1, point2, distance) {
+  return distance2d(point1, point2) < distance
 }
 
 // Drawing
@@ -197,8 +216,9 @@ function draw(scene) {
     drawLoop(loop, loopColors[idx % loopColors.length])
   })
 
-  intersectionPoints.forEach(({ point }) => {
+  intersectionPoints.forEach(({ point, segment }) => {
     // drawDebugPoint(point)
+    // drawDebugLine(segment, 'blue', [5, 30])
   })
 
   console.timeEnd('draw')
@@ -277,6 +297,30 @@ function rangeInclusive(start, stop) {
   return Array(stop - start + 1).fill(null).map((_, idx) => idx + start)
 }
 
+function takeStart(list, predicate) {
+  const result = []
+  for (let i = 0; i < list.length; i += 1) {
+    if (predicate(list[i])) {
+      result.push(list[i])
+    } else if (result.length > 0) {
+      break;
+    }
+  }
+  return result;
+}
+
+function takeEnd(list, predicate) {
+  const result = []
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (predicate(list[i])) {
+      result.unshift(list[i])
+    } else if (result.length > 0) {
+      break;
+    }
+  }
+  return result;
+}
+
 adjustCanvasSize();
 window.addEventListener('resize', () => adjustCanvasSize());
 // window.addEventListener('resize', () => draw());
@@ -287,12 +331,15 @@ function restart() {
   const loop2 = generateCircleLoop({ x: 0.5, y: -0.2 }, 0.5 + Math.random())
   const loop3 = generateCircleLoop({ x: 0.5, y: 0.8 }, 0.5 + Math.random())
   const loop4 = generateCircleLoop({ x: 1.5, y: 1.8 }, 0.5 + Math.random())
+  /*
   const loops = [
     loop1,
     loop2,
     loop3,
     loop4
   ]
+  */
+  const loops = Array(6).fill(null).map(() => generateCircleLoop({ x: 4 * (Math.random() - 0.5), y: 4 * (Math.random() - 0.5) }, 1 + Math.random()))
   const intersectionPoints = calculateIntersectionPoints(loops)
   const brokenLoops = breakLoops(loops, intersectionPoints)
   draw({ loops: brokenLoops, intersectionPoints })
