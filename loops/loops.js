@@ -1,6 +1,6 @@
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 200
+const unitLength = 100
 
 let DEBUG = true;
 
@@ -48,7 +48,7 @@ function handleCanvasClick(event) {
 // Logic
 
 function generateCircleLoop(center, radius) {
-  const resolution = 300
+  const resolution = 100
   const points = []
   for (let i = 0; i < resolution + 1; i += 1) {
     const angle = i / resolution * 2 * Math.PI
@@ -184,8 +184,20 @@ function circlePack(numCircles, minNeighbors = 1, maxNeighbors = Infinity) {
   return circles;
 }
 
+function gridPack(extentX = 3, extentY = 3) {
+  const circles = []
+  for (let x = -1 * extentX; x <= extentX; x += 1) {
+    for (let y = -1 * extentY; y <= extentY; y += 1) {
+      const radius = 0.3 + Math.random() * 0.2
+      const center = { x, y }
+      circles.push({ center, radius })
+    }
+  }
+  return circles;
+}
+
 // Drawing
-const backgroundColor = '#fff';
+const backgroundColor = '#111';
 const loopColors = [
   '#f3bebc',
   '#e7a8e3',
@@ -324,6 +336,10 @@ function rangeInclusive(start, stop) {
   return Array(stop - start + 1).fill(null).map((_, idx) => idx + start)
 }
 
+function randomIntegerBetween(low, high) {
+  return low + Math.floor((high - low + 1) * Math.random())
+}
+
 function takeStart(list, predicate) {
   const result = []
   for (let i = 0; i < list.length; i += 1) {
@@ -366,8 +382,9 @@ function restart() {
     loop4
   ]
   */
-  const packedCircles = circlePack(6, 1, 1)
-  const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.15))
+  // const packedCircles = circlePack(25, 1, Infinity)
+  const packedCircles = gridPack(2, 3)
+  const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.2))
   const intersectionPoints = calculateIntersectionPoints(loops)
   const brokenLoops = breakLoops(loops, intersectionPoints)
   draw({ loops: brokenLoops, intersectionPoints })
