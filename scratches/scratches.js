@@ -2,7 +2,7 @@ const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 const unitLength = 200
 
-let DEBUG = true;
+let DEBUG = false;
 
 const state = {};
 
@@ -75,10 +75,9 @@ function generateScratches(polygon) {
   const spine = [spineStart, spineMiddle, spineEnd]
 
   // Ribs
-  const ribSpacing = 0.3
+  const ribSpacing = 0.05
   const ribExtent = spineExtent
   const ribs = []
-  let ribsStarted = false
   let ribsEnded = false
   let ribProgress = 0.0
   while (!ribsEnded) {
@@ -150,6 +149,34 @@ function generateScratches(polygon) {
   return { points, spine, ribs }
 }
 
+function generateSubPolygons(polygon, points) {
+  const subPolygons = []
+  let startPointIdx = 0
+  let endPointIdx = 1
+  const minSubPolygonArea = polygonArea(polygon) / 4
+
+  while (endPointIdx < points.length) {
+    const startPoints = points.slice(startPointIdx, startPointIdx + 2)
+    const endPoints = points.slice(endPointIdx - 1, endPointIdx + 1)
+    if (startPointIdx % 2 !== endPointIdx % 2) {
+      endPoints.reverse()
+    }
+    const subPolygon = startPoints.concat(endPoints)
+    const area = polygonArea(subPolygon)
+
+    if (area > minSubPolygonArea) {
+      console.debug(area, subPolygon, startPointIdx, endPointIdx)
+      subPolygons.push(subPolygon)
+      startPointIdx = endPointIdx - 1
+      endPointIdx = startPointIdx + 1
+    } else {
+      endPointIdx += 1
+    }
+  }
+
+  return subPolygons
+}
+
 function polygonCenter(polygon) {
   const sumX = polygon.reduce((acc, point) => acc + point.x, 0)
   const sumY = polygon.reduce((acc, point) => acc + point.y, 0)
@@ -157,6 +184,24 @@ function polygonCenter(polygon) {
     x: sumX / polygon.length,
     y: sumY / polygon.length
   }
+}
+
+function polygonArea(polygon) {
+  const center = polygonCenter(polygon)
+  let area = 0
+  for (let i = 0; i < polygon.length; i += 1) {
+    area += triangleArea(center, polygon[i], polygon[(i + 1) % polygon.length])
+  }
+  return area;
+}
+
+// https://en.wikipedia.org/wiki/Triangle#Using_Heron's_formula
+function triangleArea(A, B, C) {
+  const a = distance2d(A, B)
+  const b = distance2d(B, C)
+  const c = distance2d(C, A)
+  const s = (a + b + c) / 2
+  return Math.sqrt(s * (s - a) * (s - b) * (s - c))
 }
 
 function polygonSegmentIntersectionPoints(polygon, segment) {
@@ -188,6 +233,22 @@ function drawPolygon(polygon) {
   ctx.restore();
 }
 
+function drawSubPolygon(polygon) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x(polygon[0].x), y(polygon[0].y))
+  polygon.forEach(point => {
+    ctx.lineTo(x(point.x), y(point.y))
+  })
+  ctx.closePath();
+  ctx.lineWidth = 2;
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+}
+
+
 function drawDebugPoint(point) {
   ctx.save();
   ctx.beginPath();
@@ -215,7 +276,7 @@ function drawDebugLine(points, color = 'red', lineDash = []) {
 }
 
 function draw(scene) {
-  const { polygon, points, spine, ribs } = scene;
+  const { polygon, points, spine, ribs, subPolygons } = scene;
 
   console.time('draw')
   if (DEBUG) {
@@ -234,7 +295,10 @@ function draw(scene) {
     })
     points.forEach(point => drawDebugPoint(point))
   }
-  drawDebugLine(points, 'green')
+  // drawDebugLine(points, 'green')
+  subPolygons.forEach(subPolygon => {
+    drawSubPolygon(subPolygon)
+  })
 
   console.timeEnd('draw')
 }
@@ -320,7 +384,9 @@ canvas.addEventListener('click', handleCanvasClick);
 function restart() {
   const polygon = generateRandomPolygon();
   const { points, spine, ribs } = generateScratches(polygon)
-  draw({ polygon, points, spine, ribs })
+  const subPolygons = generateSubPolygons(polygon, points)
+  console.log(subPolygons)
+  draw({ polygon, points, spine, ribs, subPolygons })
 }
 
 restart();
