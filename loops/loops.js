@@ -1,7 +1,3 @@
-/**
- * TODO:
- * - Detect and draw intersections in a single loop.
- */
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 const unitLength = 150
@@ -83,13 +79,13 @@ function generateRandomLoop(pointsCount = 10, extent = 4) {
 function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn) {
   let loops = []
   let intersections = []
-  const iterations = loopsCount * 10
+  const iterations = loopsCount + 500
   for (let i = 0; i < iterations; i += 1) {
     if (loops.length === loopsCount) break
     console.log(`Iteration ${i}, loops: ${loops.length}`)
 
     const candidateLoop = generateLoopFn(loops)
-    const candidateIntersections = calculateIntersections(loops, [candidateLoop])
+    const candidateIntersections = calculateIntersections([...loops, candidateLoop], [candidateLoop])
     const valid = validateCandidateLoopFn(loops, intersections, candidateLoop, candidateIntersections)
     if (valid) {
       loops = [...loops, candidateLoop]
@@ -104,10 +100,10 @@ function calculateIntersections(loops1, loops2) {
   const intersections = []
 
   for (let i = 0; i < loops1.length; i += 1) {
-    for (let l = loops1 === loops2 ? i + 1 : 0; l < loops2.length; l += 1) {
+    for (let l = loops1 === loops2 ? i : 0; l < loops2.length; l += 1) {
       const loop1 = loops1[i]
       const loop2 = loops2[l]
-      const loopIntersections = calculateLoopsIntersections(loop1, loop2)
+      const loopIntersections = loop1 === loop2 ? calculateLoopSelfIntersections(loop1) : calculateLoopsIntersections(loop1, loop2)
       loopIntersections.forEach(((intersection, pointIdx) => {
         const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: l } : { belowLoopIdx: l, aboveLoopIdx: i }
         intersections.push({ ...order, point: intersection.point, angle: intersection.angle, segment: intersection.segments[1 - pointIdx % 2] })
@@ -126,20 +122,51 @@ function calculateLoopsIntersections(loop1, loop2) {
       loop2.forEach(innerSegment => {
         for (let l = 0; l < innerSegment.length - 1; l += 1) {
           const segment2 = innerSegment.slice(l, l + 2)
-          const intersect = lineIntersectionPoint(segment1[0], segment1[1], segment2[0], segment2[1])
-          if (intersect.segmentsIntersect) {
-            const intersectionSegments = [
-              loopSegmentCloseTo(outerSegment, intersect, 0.5),
-              loopSegmentCloseTo(innerSegment, intersect, 0.5)
-            ]
-            const angle = lineIntersectionAngle(segment1[0], segment1[1], segment2[0], segment2[1])
-            intersections.push({ point: { x: intersect.x, y: intersect.y }, segments: intersectionSegments, angle })
+          const intersection = calculateSegmentIntersection(outerSegment, innerSegment, segment1, segment2)
+          if (intersection) {
+            intersections.push(intersection)
           }
         }
       })
     }
   })
   return intersections
+}
+
+function calculateLoopSelfIntersections(loop1) {
+  const intersections = []
+  loop1.forEach(outerSegment => {
+    for (let i = 0; i < outerSegment.length - 1; i += 1) {
+      const segment1 = outerSegment.slice(i, i + 2)
+      loop1.forEach(innerSegment => {
+        for (let l = innerSegment === outerSegment ? i + 1 : 0; l < innerSegment.length - 1; l += 1) {
+          const segment2 = innerSegment.slice(l, l + 2)
+          if (segment1[0] === segment2[0] || segment1[0] === segment2[1] || segment1[1] === segment2[0]) {
+            continue
+          }
+          const intersection = calculateSegmentIntersection(outerSegment, innerSegment, segment1, segment2)
+          if (intersection) {
+            intersections.push(intersection)
+          }
+        }
+      })
+    }
+  })
+  return intersections
+}
+
+function calculateSegmentIntersection(outerSegment, innerSegment, segment1, segment2) {
+  const intersect = lineIntersectionPoint(segment1[0], segment1[1], segment2[0], segment2[1])
+  if (intersect.segmentsIntersect) {
+    const intersectionSegments = [
+      loopSegmentCloseTo(outerSegment, intersect, 0.5),
+      loopSegmentCloseTo(innerSegment, intersect, 0.5)
+    ]
+    const angle = lineIntersectionAngle(segment1[0], segment1[1], segment2[0], segment2[1])
+    return { point: { x: intersect.x, y: intersect.y }, segments: intersectionSegments, angle }
+  } else {
+    return null
+  }
 }
 
 function loopSegmentCloseTo(segment, intersect, radius) {
@@ -167,12 +194,14 @@ function breakLoops(loops, intersections) {
 function breakLoop(loop, intersection) {
   const minSegmentDistance = 0.1
   const maxPointDistance = 0.2
+  let broken = false
   return loop.map(segment => {
+    if (broken) return [segment]
     const brokenSegments = []
     let brokenSegment = []
     for (let i = 0; i < segment.length; i += 1) {
       const point = segment[i]
-      if (!pointCloseToSegment(point, intersection.segment, minSegmentDistance) || !pointCloseTo(point, intersection.point, maxPointDistance)) {
+      if ((brokenSegments.length > 0 && brokenSegment.length > 0) || !pointCloseToSegment(point, intersection.segment, minSegmentDistance) || !pointCloseTo(point, intersection.point, maxPointDistance)) {
         brokenSegment.push(point)
       } else {
         if (brokenSegment.length) {
@@ -183,6 +212,9 @@ function breakLoop(loop, intersection) {
     }
     if (brokenSegment.length) {
       brokenSegments.push(brokenSegment)
+    }
+    if (brokenSegments.length > 1) {
+      broken = true
     }
     return brokenSegments
   }).reduce((acc, segments) => acc.concat(segments), [])
@@ -482,7 +514,8 @@ function restart() {
   ]
   */
   function generate(loops) {
-    const length = loops.length < 2 ? 6 : 3
+    const length = loops.length < 2 ? 5 : 3 + Math.floor(Math.random() * 3)
+    // const length = loops.length < 2 ? 6 : 3
     return generateRandomLoop(length, 5)
   }
   function validate(loops, intersections, candidateLoop, candidateIntersections) {
@@ -500,7 +533,7 @@ function restart() {
       })
     })
   }
-  const loops = generateRandomLoops(10, generate, validate)
+  const loops = generateRandomLoops(6, generate, validate)
   const intersections = calculateIntersections(loops, loops)
   const brokenLoops = breakLoops(loops, intersections)
   draw({ loops: brokenLoops, intersections })
