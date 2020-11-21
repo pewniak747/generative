@@ -1,6 +1,11 @@
+/**
+ * TODO:
+ * - Filter out intersections with too steep angles.
+ * - Detect and draw intersections in a single loop.
+ */
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 100
+const unitLength = 200
 
 let DEBUG = true;
 
@@ -59,13 +64,50 @@ function generateCircleLoop(center, radius) {
   return [points]
 }
 
-function calculateIntersectionPoints(loops) {
+function generateRandomLoop(pointsCount = 10, extent = 4) {
+  const resolution = 6
+  const points = []
+  const circles = circlePack(pointsCount, extent, 0, 0)
+  for (let i = 0; i < circles.length; i += 1) {
+    const x = circles[i].center.x
+    const y = circles[i].center.y
+    points.push([x, y])
+  }
+  points.push(points[0])
+  points.push(points[1])
+  const smoothedPoints = chaikin(points, resolution, false).map(([x, y]) => ({ x, y }))
+  const slicedPoints = smoothedPoints.slice(Math.pow(2, resolution), smoothedPoints.length - Math.pow(2, resolution))
+  slicedPoints.push(slicedPoints[0])
+  return [slicedPoints]
+}
+
+function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn) {
+  let loops = []
+  let intersections = []
+  const iterations = loopsCount * 10
+  for (let i = 0; i < iterations; i += 1) {
+    if (loops.length === loopsCount) break
+    console.log(`Iteration ${i}, loops: ${loops.length}`)
+
+    const candidateLoop = generateLoopFn(loops)
+    const candidateIntersections = calculateIntersectionPoints(loops, [candidateLoop])
+    const valid = validateCandidateLoopFn(loops, intersections, candidateLoop, candidateIntersections)
+    if (valid) {
+      loops = [...loops, candidateLoop]
+      intersections = [...intersections, ...candidateIntersections]
+    }
+
+  }
+  return loops;
+}
+
+function calculateIntersectionPoints(loops1, loops2) {
   const intersectionPoints = []
 
-  for (let i = 0; i < loops.length; i += 1) {
-    for (let l = i + 1; l < loops.length; l += 1) {
-      const loop1 = loops[i]
-      const loop2 = loops[l]
+  for (let i = 0; i < loops1.length; i += 1) {
+    for (let l = loops1 === loops2 ? i + 1 : 0; l < loops2.length; l += 1) {
+      const loop1 = loops1[i]
+      const loop2 = loops2[l]
       const loopIntersectionPoints = calculateLoopsIntersectionPoints(loop1, loop2)
       loopIntersectionPoints.forEach(((intersection, pointIdx) => {
         const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: l } : { belowLoopIdx: l, aboveLoopIdx: i }
@@ -158,9 +200,8 @@ function pointCloseTo(point1, point2, distance) {
   return distance2d(point1, point2) < distance
 }
 
-function circlePack(numCircles, minNeighbors = 1, maxNeighbors = Infinity) {
+function circlePack(numCircles, extent = 4, minNeighbors = 1, maxNeighbors = Infinity) {
   const circles = []
-  const extent = 2
   const minGap = 0.1
   const maxGap = 0.15
   let iterations = 0
@@ -364,6 +405,38 @@ function takeEnd(list, predicate) {
   return result;
 }
 
+// https://www.npmjs.com/package/chaikin
+function cut(start, end, ratio) {
+  const r1 = [start[0] * (1 - ratio) + end[0] * ratio, start[1] * (1 - ratio) + end[1] * ratio];
+  const r2 = [start[0] * ratio + end[0] * (1 - ratio), start[1] * ratio + end[1] * (1 - ratio)];
+  return [r1, r2];
+}
+
+function chaikin(curve, iterations = 1, closed = false, ratio = 0.25) {
+  if (ratio > 0.5) {
+    ratio = (1 - ratio);
+  }
+
+  for (let i = 0; i < iterations; i++) {
+    let refined = [];
+    refined.push(curve[0]);
+
+    for (let j = 1; j < curve.length; j++) {
+      let points = cut(curve[j - 1], curve[j], ratio);
+      refined = refined.concat(points);
+    }
+
+    if (closed) {
+      refined = refined.concat(cut(curve[curve.length - 1], curve[0], ratio));
+    } else {
+      refined.push(curve[curve.length - 1]);
+    }
+
+    curve = refined;
+  }
+  return curve;
+}
+
 adjustCanvasSize();
 window.addEventListener('resize', () => adjustCanvasSize());
 // window.addEventListener('resize', () => draw());
@@ -382,10 +455,35 @@ function restart() {
     loop4
   ]
   */
-  // const packedCircles = circlePack(25, 1, Infinity)
-  const packedCircles = gridPack(2, 3)
-  const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.2))
-  const intersectionPoints = calculateIntersectionPoints(loops)
+  // const packedCircles = circlePack(25, 4, 1, Infinity)
+  // const packedCircles = gridPack(2, 3)
+  // const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.2))
+  /*
+  const loops = [
+    generateRandomLoop(3),
+    generateRandomLoop(3),
+    generateRandomLoop(3),
+    generateRandomLoop(3),
+    generateRandomLoop(3),
+    generateRandomLoop(3),
+  ]
+  */
+  function generate(loops) {
+    const length = loops.length === 0 ? 6 : 4
+    return generateRandomLoop(3, 3)
+  }
+  function validate(loops, intersections, candidateLoop, candidateIntersections) {
+    const minDistance = 0.5
+    const allIntersections = [...intersections, ...candidateIntersections]
+    if (loops.length > 0 && candidateIntersections.length === 0) return false
+    return candidateIntersections.every(candidateIntersection => {
+      return allIntersections.filter(i => i !== candidateIntersection).every(intersection => {
+        return distance2d(candidateIntersection.point, intersection.point) > minDistance
+      })
+    })
+  }
+  const loops = generateRandomLoops(5, generate, validate)
+  const intersectionPoints = calculateIntersectionPoints(loops, loops)
   const brokenLoops = breakLoops(loops, intersectionPoints)
   draw({ loops: brokenLoops, intersectionPoints })
 }
