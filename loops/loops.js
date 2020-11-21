@@ -59,10 +59,10 @@ function generateCircleLoop(center, radius) {
   return [points]
 }
 
-function generateRandomLoop(pointsCount = 10, extent = 4) {
+function generateRandomLoop(pointsCount = 10, extent = 4, tight = false) {
   const resolution = 6
   const points = []
-  const circles = circlePack(pointsCount, extent, 0, 0)
+  const circles = circlePack(pointsCount, extent, tight ? 1 : 0, Infinity)
   for (let i = 0; i < circles.length; i += 1) {
     const x = circles[i].center.x
     const y = circles[i].center.y
@@ -85,7 +85,7 @@ function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn
     console.log(`Iteration ${i}, loops: ${loops.length}`)
 
     const candidateLoop = generateLoopFn(loops)
-    const candidateIntersections = calculateIntersections([...loops, candidateLoop], [candidateLoop])
+    const candidateIntersections = calculateIntersections([...loops, candidateLoop], candidateLoop)
     const valid = validateCandidateLoopFn(loops, intersections, candidateLoop, candidateIntersections)
     if (valid) {
       loops = [...loops, candidateLoop]
@@ -96,13 +96,29 @@ function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn
   return loops;
 }
 
-function calculateIntersections(loops1, loops2) {
+function calculateIntersections(loops, loop) {
   const intersections = []
 
-  for (let i = 0; i < loops1.length; i += 1) {
-    for (let l = loops1 === loops2 ? i : 0; l < loops2.length; l += 1) {
-      const loop1 = loops1[i]
-      const loop2 = loops2[l]
+  for (let i = 0; i < loops.length; i += 1) {
+    const loop1 = loops[i]
+    const loop2 = loop
+    const loopIntersections = loop1 === loop2 ? calculateLoopSelfIntersections(loop1) : calculateLoopsIntersections(loop1, loop2)
+    loopIntersections.forEach(((intersection, pointIdx) => {
+      const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: loops.length - 1 } : { belowLoopIdx: loops.length - 1, aboveLoopIdx: i }
+      intersections.push({ ...order, point: intersection.point, angle: intersection.angle, segment: intersection.segments[1 - pointIdx % 2] })
+    }))
+  }
+
+  return intersections
+}
+
+function calculateCrossIntersections(loops) {
+  const intersections = []
+
+  for (let i = 0; i < loops.length; i += 1) {
+    for (let l = i; l < loops.length; l += 1) {
+      const loop1 = loops[i]
+      const loop2 = loops[l]
       const loopIntersections = loop1 === loop2 ? calculateLoopSelfIntersections(loop1) : calculateLoopsIntersections(loop1, loop2)
       loopIntersections.forEach(((intersection, pointIdx) => {
         const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: l } : { belowLoopIdx: l, aboveLoopIdx: i }
@@ -241,7 +257,7 @@ function circlePack(numCircles, extent = 4, minNeighbors = 1, maxNeighbors = Inf
     iterations += 1
     const x = extent * 2 * (Math.random() - 0.5)
     const y = extent * 2 * (Math.random() - 0.5)
-    const radius = 0.3 + Math.random() * 0.2
+    const radius = 0.8 + Math.random() * 0.2
     const center = { x, y }
     const valid = circles.every(c => !pointCloseTo(c.center, center, c.radius + radius + minGap))
     const neighbors = circles.filter(c => !pointCloseTo(c.center, center, c.radius + radius + minGap) && pointCloseTo(c.center, center, c.radius + radius + maxGap))
@@ -516,7 +532,8 @@ function restart() {
   function generate(loops) {
     const length = loops.length < 2 ? 5 : 3 + Math.floor(Math.random() * 3)
     // const length = loops.length < 2 ? 6 : 3
-    return generateRandomLoop(length, 5)
+    const tight = loops.length > 1
+    return generateRandomLoop(length, 5, tight)
   }
   function validate(loops, intersections, candidateLoop, candidateIntersections) {
     const minDistance = 0.5
@@ -526,7 +543,13 @@ function restart() {
       const angleDiff = Math.abs(Math.PI / 2 - Math.abs(candidateIntersection.angle))
       return angleDiff > Math.PI / 6
     })
+    const intersectsOthers = candidateIntersections.filter(candidateIntersection => {
+      const isBelow = candidateIntersection.belowLoopIdx !== loops.length
+      const isAbove = candidateIntersection.aboveLoopIdx !== loops.length
+      return isAbove != isBelow
+    }).length > 0
     if (tooSteep) { return false }
+    if (loops.length > 0 && !intersectsOthers) { return false }
     return candidateIntersections.every(candidateIntersection => {
       return allIntersections.filter(i => i !== candidateIntersection).every(intersection => {
         return distance2d(candidateIntersection.point, intersection.point) > minDistance
@@ -534,7 +557,7 @@ function restart() {
     })
   }
   const loops = generateRandomLoops(6, generate, validate)
-  const intersections = calculateIntersections(loops, loops)
+  const intersections = calculateCrossIntersections(loops)
   const brokenLoops = breakLoops(loops, intersections)
   draw({ loops: brokenLoops, intersections })
 }
