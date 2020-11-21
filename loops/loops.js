@@ -1,11 +1,10 @@
 /**
  * TODO:
- * - Filter out intersections with too steep angles.
  * - Detect and draw intersections in a single loop.
  */
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d');
-const unitLength = 200
+const unitLength = 150
 
 let DEBUG = true;
 
@@ -90,7 +89,7 @@ function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn
     console.log(`Iteration ${i}, loops: ${loops.length}`)
 
     const candidateLoop = generateLoopFn(loops)
-    const candidateIntersections = calculateIntersectionPoints(loops, [candidateLoop])
+    const candidateIntersections = calculateIntersections(loops, [candidateLoop])
     const valid = validateCandidateLoopFn(loops, intersections, candidateLoop, candidateIntersections)
     if (valid) {
       loops = [...loops, candidateLoop]
@@ -101,25 +100,25 @@ function generateRandomLoops(loopsCount, generateLoopFn, validateCandidateLoopFn
   return loops;
 }
 
-function calculateIntersectionPoints(loops1, loops2) {
-  const intersectionPoints = []
+function calculateIntersections(loops1, loops2) {
+  const intersections = []
 
   for (let i = 0; i < loops1.length; i += 1) {
     for (let l = loops1 === loops2 ? i + 1 : 0; l < loops2.length; l += 1) {
       const loop1 = loops1[i]
       const loop2 = loops2[l]
-      const loopIntersectionPoints = calculateLoopsIntersectionPoints(loop1, loop2)
-      loopIntersectionPoints.forEach(((intersection, pointIdx) => {
+      const loopIntersections = calculateLoopsIntersections(loop1, loop2)
+      loopIntersections.forEach(((intersection, pointIdx) => {
         const order = pointIdx % 2 === 0 ? { belowLoopIdx: i, aboveLoopIdx: l } : { belowLoopIdx: l, aboveLoopIdx: i }
-        intersectionPoints.push({ ...order, point: intersection.point, segment: intersection.segments[1 - pointIdx % 2] })
+        intersections.push({ ...order, point: intersection.point, angle: intersection.angle, segment: intersection.segments[1 - pointIdx % 2] })
       }))
     }
   }
 
-  return intersectionPoints
+  return intersections
 }
 
-function calculateLoopsIntersectionPoints(loop1, loop2) {
+function calculateLoopsIntersections(loop1, loop2) {
   const intersections = []
   loop1.forEach(outerSegment => {
     for (let i = 0; i < outerSegment.length - 1; i += 1) {
@@ -133,7 +132,8 @@ function calculateLoopsIntersectionPoints(loop1, loop2) {
               loopSegmentCloseTo(outerSegment, intersect, 0.5),
               loopSegmentCloseTo(innerSegment, intersect, 0.5)
             ]
-            intersections.push({ point: { x: intersect.x, y: intersect.y }, segments: intersectionSegments })
+            const angle = lineIntersectionAngle(segment1[0], segment1[1], segment2[0], segment2[1])
+            intersections.push({ point: { x: intersect.x, y: intersect.y }, segments: intersectionSegments, angle })
           }
         }
       })
@@ -283,7 +283,7 @@ function drawLoop(loop, color = 'red') {
 }
 
 function draw(scene) {
-  const { loops, intersectionPoints } = scene;
+  const { loops, intersections } = scene;
 
   console.time('draw')
   if (DEBUG) {
@@ -296,7 +296,7 @@ function draw(scene) {
     drawLoop(loop, loopColors[idx % loopColors.length])
   })
 
-  intersectionPoints.forEach(({ point, segment }) => {
+  intersections.forEach(({ point, segment }) => {
     // drawDebugPoint(point)
     // drawDebugLine(segment, 'rgba(0, 0, 0, 0.05)', [5, 30])
   })
@@ -364,6 +364,19 @@ function lineIntersectionPoint({ x: x1, y: y1 }, { x: x2, y: y2 }, { x: x3, y: y
   return { x, y, segmentsIntersect };
 }
 
+function slope({ x: x1, y: y1 }, { x: x2, y: y2 }) {
+  return (y2 - y1) / (x2 - x1)
+}
+
+function angle(s1, s2) {
+  return Math.atan((s2 - s1) / (1 + (s2 * s1)))
+}
+
+function lineIntersectionAngle(p1, p2, p3, p4) {
+  const slope1 = slope(p1, p2)
+  const slope2 = slope(p3, p4)
+  return angle(slope1, slope2)
+}
 
 function clamp(a, b, value) {
   const max = Math.max(a, b);
@@ -469,23 +482,28 @@ function restart() {
   ]
   */
   function generate(loops) {
-    const length = loops.length === 0 ? 6 : 4
-    return generateRandomLoop(3, 3)
+    const length = loops.length < 2 ? 6 : 3
+    return generateRandomLoop(length, 5)
   }
   function validate(loops, intersections, candidateLoop, candidateIntersections) {
     const minDistance = 0.5
     const allIntersections = [...intersections, ...candidateIntersections]
     if (loops.length > 0 && candidateIntersections.length === 0) return false
+    const tooSteep = candidateIntersections.some(candidateIntersection => {
+      const angleDiff = Math.abs(Math.PI / 2 - Math.abs(candidateIntersection.angle))
+      return angleDiff > Math.PI / 6
+    })
+    if (tooSteep) { return false }
     return candidateIntersections.every(candidateIntersection => {
       return allIntersections.filter(i => i !== candidateIntersection).every(intersection => {
         return distance2d(candidateIntersection.point, intersection.point) > minDistance
       })
     })
   }
-  const loops = generateRandomLoops(5, generate, validate)
-  const intersectionPoints = calculateIntersectionPoints(loops, loops)
-  const brokenLoops = breakLoops(loops, intersectionPoints)
-  draw({ loops: brokenLoops, intersectionPoints })
+  const loops = generateRandomLoops(10, generate, validate)
+  const intersections = calculateIntersections(loops, loops)
+  const brokenLoops = breakLoops(loops, intersections)
+  draw({ loops: brokenLoops, intersections })
 }
 
 restart();
