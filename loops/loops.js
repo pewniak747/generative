@@ -153,11 +153,13 @@ function calculateLoopSelfIntersections(loop1) {
   const intersections = []
   loop1.forEach(outerSegment => {
     for (let i = 0; i < outerSegment.length - 1; i += 1) {
-      const segment1 = outerSegment.slice(i, i + 2)
+      const outerSegmentSlice = loop1.length === 1 ? [...outerSegment, ...outerSegment] : outerSegment
+      const segment1 = outerSegmentSlice.slice(i, i + 2)
       loop1.forEach(innerSegment => {
-        for (let l = innerSegment === outerSegment ? i + 1 : 0; l < innerSegment.length - 1; l += 1) {
-          const segment2 = innerSegment.slice(l, l + 2)
-          if (segment1[0] === segment2[0] || segment1[0] === segment2[1] || segment1[1] === segment2[0]) {
+        const innerSegmentSlice = loop1.length === 1 ? [...innerSegment, ...innerSegment] : innerSegment
+        for (let l = innerSegment === outerSegment ? i + 1 : 0; l < innerSegment.length; l += 1) {
+          const segment2 = innerSegmentSlice.slice(l, l + 2)
+          if (pointsEqual(segment1[0], segment2[0]) || pointsEqual(segment1[0], segment2[1]) || pointsEqual(segment1[1], segment2[0])) {
             continue
           }
           const intersection = calculateSegmentIntersection(outerSegment, innerSegment, segment1, segment2)
@@ -257,7 +259,7 @@ function circlePack(numCircles, extent = 4, minNeighbors = 1, maxNeighbors = Inf
     iterations += 1
     const x = extent * 2 * (Math.random() - 0.5)
     const y = extent * 2 * (Math.random() - 0.5)
-    const radius = 0.8 + Math.random() * 0.2
+    const radius = 0.5 + Math.random() * 0.2
     const center = { x, y }
     const valid = circles.every(c => !pointCloseTo(c.center, center, c.radius + radius + minGap))
     const neighbors = circles.filter(c => !pointCloseTo(c.center, center, c.radius + radius + minGap) && pointCloseTo(c.center, center, c.radius + radius + maxGap))
@@ -345,7 +347,7 @@ function draw(scene) {
   })
 
   intersections.forEach(({ point, segment }) => {
-    // drawDebugPoint(point)
+    drawDebugPoint(point)
     // drawDebugLine(segment, 'rgba(0, 0, 0, 0.05)', [5, 30])
   })
 
@@ -434,6 +436,10 @@ function clamp(a, b, value) {
   return value;
 }
 
+function pointsEqual(p1, p2) {
+  return p1.x === p2.x && p1.y === p2.y
+}
+
 function rangeInclusive(start, stop) {
   return Array(stop - start + 1).fill(null).map((_, idx) => idx + start)
 }
@@ -517,7 +523,7 @@ function restart() {
   ]
   */
   // const packedCircles = circlePack(25, 4, 1, Infinity)
-  // const packedCircles = gridPack(2, 3)
+  // const packedCircles = gridPack(2, 1)
   // const loops = packedCircles.map(circle => generateCircleLoop({ x: circle.center.x, y: circle.center.y }, circle.radius + 0.2))
   /*
   const loops = [
@@ -530,7 +536,7 @@ function restart() {
   ]
   */
   function generate(loops) {
-    const length = loops.length < 2 ? 5 : 3 + Math.floor(Math.random() * 3)
+    const length = loops.length < 1 ? 8 : 3 + Math.floor(Math.random() * 3)
     // const length = loops.length < 2 ? 6 : 3
     const tight = loops.length > 1
     return generateRandomLoop(length, 5, tight)
@@ -556,7 +562,7 @@ function restart() {
       })
     })
   }
-  const loops = generateRandomLoops(6, generate, validate)
+  const loops = generateRandomLoops(5, generate, validate)
   const intersections = calculateCrossIntersections(loops)
   const brokenLoops = breakLoops(loops, intersections)
   draw({ loops: brokenLoops, intersections })
