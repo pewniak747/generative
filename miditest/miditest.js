@@ -162,7 +162,7 @@ function drawCircle(position, radius, value, color, text) {
   ctx.textBaseline = 'middle'
   ctx.font = `bold ${scale(radius * 0.5)}px sans-serif`
   ctx.fillStyle = darker.formatHex()
-  ctx.fillText(text, x(position.x), y(position.y))
+  // ctx.fillText(text, x(position.x), y(position.y))
 
   ctx.restore()
 }
@@ -247,13 +247,17 @@ Signal.fromNotePitch = function (midiInput, min = 0, max = 127) {
 Signal.fromControlChange = function (midiInput, ccNumber, stiffness = 1) {
   const signal = new Signal("cc")
   const continuous = new Continuous(stiffness)
+  const min = 0
+  // const max = 127 // 7 bit
+  const max = 16384 // 14 bit
+  let fine = 0;
+  let coarse = 0;
   midiInput.addListener("controlchange", "all", (msg) => {
     if (msg.controller.number === ccNumber) {
-      const min = 0
-      const max = 127
-      const value = (clamp(min, max, msg.value) - min) / (max - min)
-      // console.log(msg.controller.number, value)
-      // signal.setValue(value)
+      coarse = msg.value
+    } else if (msg.controller.number === ccNumber + 32) {
+      fine = msg.value
+      const value = (clamp(min, max, coarse * 128 + fine) - min) / (max - min)
       continuous.setValue(value)
     }
   })
@@ -279,9 +283,9 @@ WebMidi.enable(function (err) {
     const midiInput = WebMidi.inputs[0]
     // const gate = Signal.fromNoteGate(midiInput)
     // const pitch = Signal.fromNotePitch(midiInput, 50, 80)
-    const ccZ = Signal.fromControlChange(midiInput, 1, 0.001)
-    const ccX = Signal.fromControlChange(midiInput, 2, 0.001)
-    const ccY = Signal.fromControlChange(midiInput, 3, 0.001)
+    const ccZ = Signal.fromControlChange(midiInput, 1, 1)
+    const ccX = Signal.fromControlChange(midiInput, 2, 1)
+    const ccY = Signal.fromControlChange(midiInput, 3, 1)
 
     function drawFrame() {
       draw({
